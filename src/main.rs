@@ -19,6 +19,7 @@
 #![feature(proc_macro_hygiene, decl_macro)]
 
 use std::{
+    path::PathBuf,
     iter,
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -27,11 +28,11 @@ use std::{
 extern crate rocket;
 
 use rocket::{
-    http::{Cookie, Cookies, Status},
-    request::{Form, FromRequest, Outcome, Request, State},
-    response::{status::*, Redirect},
+    http::Status,
+    request::{FromRequest, Outcome, Request, State},
+    response::{content::{Html, JavaScript}, status::*},
 };
-use rocket_contrib::{databases::database, serve};
+use rocket_contrib::{databases::database, json::Json};
 
 #[macro_use]
 extern crate diesel;
@@ -65,9 +66,8 @@ fn user_profile(user_token: UserToken) -> String {
 fn register(
     db: UserDbConn,
     jwt_key: State<JWTKey>,
-    mut cookies: Cookies,
-    new_user_form: Form<NewUserForm>,
-) -> Redirect {
+    new_user_form: Json<NewUserForm>,
+) -> Result<Json<NewUserResp>, Conflict<()>> {
     use schema::{user_auths, users};
 
     let mut new_user = new_user_form.into_inner();
@@ -77,40 +77,40 @@ fn register(
     let user: NewUser = NewUser {
         username: new_user.username.clone(),
     };
-    let user_id: i32 = diesel::insert_into(users::table)
+    let new_user_res = diesel::insert_into(users::table)
         .values(&user)
         .returning(users::id)
-        .get_result(&conn)
-        .expect("Unable to insert new user into database.");
+        .get_result(&conn);
 
-    // Hash and insert the user credentials.
-    let salt = random_string(10);
-    new_user.password.extend(salt.chars());
-    let user_auth: NewUserAuth = NewUserAuth {
-        user_id,
-        salt,
-        password_hash: secure_hash(new_user.password),
-    };
-    diesel::insert_into(user_auths::table)
-        .values(&user_auth)
-        .execute(&conn)
-        .expect("Unable to insert new user auth into database.");
+    match new_user_res {
+        Ok(user_id) => {
+            // Hash and insert the user credentials.
+            let salt = random_string(10);
+            new_user.password.extend(salt.chars());
+            let user_auth: NewUserAuth = NewUserAuth {
+                user_id,
+                salt,
+                password_hash: secure_hash(new_user.password),
+            };
+            diesel::insert_into(user_auths::table)
+                .values(&user_auth)
+                .execute(&conn)
+                .expect("Unable to insert new user auth into database.");
 
-    // Add the JWT as a cookie.
-    let jwt = generate_jwt(user.username.clone(), &jwt_key.inner());
-    cookies.add_private(Cookie::new("auth-jwt", jwt));
-
-    // Redirect to the user's page.
-    Redirect::to(uri!(user_profile))
+            // Add the JWT as a cookie.
+            let token = generate_jwt(user.username.clone(), &jwt_key.inner());
+            Ok(Json(NewUserResp { token }))
+        }
+        _ => Err(Conflict(None)),
+    }
 }
 
 #[post("/login", data = "<login_form>")]
 fn login(
     db: UserDbConn,
     jwt_key: State<JWTKey>,
-    mut cookies: Cookies,
-    login_form: Form<LoginForm>,
-) -> Result<Redirect, Unauthorized<()>> {
+    login_form: Json<LoginForm>,
+) -> Result<Json<LoginResp>, Unauthorized<()>> {
     use schema::{user_auths, users};
 
     let mut login = login_form.into_inner();
@@ -126,9 +126,8 @@ fn login(
         login.password.extend(salt.chars());
         if secure_hash(login.password) == password_hash {
             // Add the JWT as a cookie.
-            let jwt = generate_jwt(login.username.clone(), jwt_key.inner());
-            cookies.add_private(Cookie::new("auth-jwt", jwt));
-            Ok(Redirect::to(uri!(user_profile)))
+            let token = generate_jwt(login.username.clone(), jwt_key.inner());
+            Ok(Json(LoginResp { token }))
         } else {
             Err(Unauthorized(None))
         }
@@ -201,6 +200,21 @@ fn generate_jwt(username: String, key: &JWTKey) -> String {
     jwt_encode(&JWTHeader::default(), &payload, &key.encoder).expect("Unable to encode JWT.")
 }
 
+#[get("/elm.js", rank = 1)]
+fn gui_lib() -> JavaScript<&'static str> {
+    JavaScript(include_str!(env!("GUI_LIB")))
+}
+
+#[get("/")]
+fn gui_root() -> Html<&'static str> {
+    Html(include_str!(env!("GUI_INDEX")))
+}
+
+#[get("/<_p..>", rank = 2)]
+fn gui(_p: PathBuf) -> Html<&'static str> {
+    Html(include_str!(env!("GUI_INDEX")))
+}
+
 fn main() {
     let secret = b"secret";
     let jwt_key = JWTKey {
@@ -209,8 +223,8 @@ fn main() {
     };
     rocket::ignite()
         .attach(UserDbConn::fairing())
-        .mount("/", serve::StaticFiles::new("static", serve::Options::Index))
-        .mount("/", routes![user_profile, register, login])
+        .mount("/", routes![gui_root, gui, gui_lib])
+        .mount("/api", routes![user_profile, register, login])
         .manage(jwt_key)
         .launch();
 }

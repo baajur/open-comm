@@ -17,8 +17,9 @@ in
     buildInputs = [
       rustChannel
       cargo-edit
-      sqlite
       diesel-cli
+      elmPackages.elm
+      elmPackages.elm-test
     ];
     shellHook = ''
       if ! docker ps --format '{{.Names}}' | grep -w open-comm-dev-db &>/dev/null; then

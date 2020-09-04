@@ -1,1 +1,5 @@
-/target
+**/target/
+**/elm-stuff/
+**/.cache/
+**/node_modules/
+web-gui/elm.js

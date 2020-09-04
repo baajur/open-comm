@@ -63,10 +63,20 @@ pub struct NewUserForm {
     pub password: String,
 }
 
+#[derive(Serialize)]
+pub struct NewUserResp {
+    pub token: String,
+}
+
 #[derive(FromForm, Deserialize)]
 pub struct LoginForm {
     pub username: String,
     pub password: String,
+}
+
+#[derive(Serialize)]
+pub struct LoginResp {
+    pub token: String,
 }
 
 #[derive(Debug)]
