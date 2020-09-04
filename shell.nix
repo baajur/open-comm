@@ -20,6 +20,7 @@ in
       diesel-cli
       elmPackages.elm
       elmPackages.elm-test
+      elmPackages.elm-format
     ];
     shellHook = ''
       if ! docker ps --format '{{.Names}}' | grep -w open-comm-dev-db &>/dev/null; then

@@ -137,41 +137,41 @@ changeRouteTo maybeRoute model =
                 |> updateWith Home GotHomeMsg model
 
 
-update : Msg -> Model -> (Model, Cmd Msg)
+update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
-    case (msg, model) of
-        (ClickedLink (Browser.Internal url), _) ->
+    case ( msg, model ) of
+        ( ClickedLink (Browser.Internal url), _ ) ->
             ( model
             , Nav.pushUrl (Session.navKey (toSession model)) (Url.toString url)
             )
 
-        (ClickedLink (Browser.External href), _) ->
+        ( ClickedLink (Browser.External href), _ ) ->
             ( model
             , Nav.load href
             )
 
-        (GotLoginMsg subMsg, Login subModel) ->
+        ( GotLoginMsg subMsg, Login subModel ) ->
             Login.update subMsg subModel
                 |> updateWith Login GotLoginMsg model
 
-        (GotRegisterMsg subMsg, Register subModel) ->
+        ( GotRegisterMsg subMsg, Register subModel ) ->
             Register.update subMsg subModel
                 |> updateWith Register GotRegisterMsg model
 
-        (GotHomeMsg subMsg, Home subModel) ->
+        ( GotHomeMsg subMsg, Home subModel ) ->
             Home.update subMsg subModel
                 |> updateWith Home GotHomeMsg model
 
-        (ChangeUrl url, _) ->
+        ( ChangeUrl url, _ ) ->
             changeRouteTo (Route.fromUrl url) model
 
-        (GotSession session, Redirect _) ->
-            (Redirect session
+        ( GotSession session, Redirect _ ) ->
+            ( Redirect session
             , Route.pushUrl (Session.navKey session) Route.Home
             )
 
-        (_, _) ->
-            (model, Cmd.none)
+        ( _, _ ) ->
+            ( model, Cmd.none )
 
 
 updateWith :

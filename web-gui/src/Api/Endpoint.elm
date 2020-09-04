@@ -17,7 +17,7 @@
 -}
 
 
-module Api.Endpoint exposing (Endpoint, login, register, request, home)
+module Api.Endpoint exposing (Endpoint, home, login, register, request)
 
 import Http
 import Url.Builder exposing (QueryParameter)
@@ -82,6 +82,7 @@ login =
 register : Endpoint
 register =
     url [ "register" ] []
+
 
 home : Endpoint
 home =

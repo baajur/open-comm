@@ -21,13 +21,13 @@ port module Api exposing
     ( LoginForm
     , RegisterForm
     , User
+    , application
     , login
-    , register
-    , username
-    , storeUser
     , logout
     , onUserChange
-    , application
+    , register
+    , storeUser
+    , username
     )
 
 import Api.Endpoint as Endpoint exposing (Endpoint)

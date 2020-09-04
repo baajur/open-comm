@@ -16,11 +16,11 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-use rocket::FromForm;
 use diesel::{Insertable, Queryable};
-use serde::{Serialize, Deserialize};
+use rocket::FromForm;
+use serde::{Deserialize, Serialize};
 
-use super::schema::{users, user_auths};
+use super::schema::{user_auths, users};
 
 #[derive(Queryable)]
 pub struct User {
@@ -36,7 +36,7 @@ pub struct UserToken {
 }
 
 #[derive(Insertable)]
-#[table_name="users"]
+#[table_name = "users"]
 pub struct NewUser {
     pub username: String,
 }
@@ -50,7 +50,7 @@ pub struct UserAuth {
 }
 
 #[derive(Insertable)]
-#[table_name="user_auths"]
+#[table_name = "user_auths"]
 pub struct NewUserAuth {
     pub user_id: i32,
     pub password_hash: String,

@@ -19,8 +19,8 @@
 #![feature(proc_macro_hygiene, decl_macro)]
 
 use std::{
-    path::PathBuf,
     iter,
+    path::PathBuf,
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -30,7 +30,10 @@ extern crate rocket;
 use rocket::{
     http::Status,
     request::{FromRequest, Outcome, Request, State},
-    response::{content::{Html, JavaScript}, status::*},
+    response::{
+        content::{Html, JavaScript},
+        status::*,
+    },
 };
 use rocket_contrib::{databases::database, json::Json};
 

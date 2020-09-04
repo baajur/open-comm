@@ -17,12 +17,12 @@
 -}
 
 
-module Route exposing (Route(..), showRoute, pushUrl, fromUrl, replaceUrl)
+module Route exposing (Route(..), fromUrl, pushUrl, replaceUrl, showRoute)
 
 import Browser.Navigation as Nav
 import Url exposing (Url)
-import Url.Parser as Parser exposing ((</>), Parser, oneOf, s, string)
 import Url.Builder as Builder
+import Url.Parser as Parser exposing ((</>), Parser, oneOf, s, string)
 
 
 type Route

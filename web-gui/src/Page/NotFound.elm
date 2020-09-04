@@ -14,11 +14,13 @@
 
    You should have received a copy of the GNU Affero General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.
- -}
+-}
+
 
 module Page.NotFound exposing (..)
 
 import Html exposing (Html)
+
 
 view : { title : String, content : Html msg }
 view =

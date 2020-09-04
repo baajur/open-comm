@@ -39,5 +39,8 @@ fn main() {
     let gui_index_path = out_dir.join("index.html");
     fs::copy("web-gui/index.html", gui_index_path.clone())
         .expect("Failed to copy web-gui entry point to out directory.");
-    println!("cargo:rustc-env=GUI_INDEX={}", gui_index_path.to_str().unwrap());
+    println!(
+        "cargo:rustc-env=GUI_INDEX={}",
+        gui_index_path.to_str().unwrap()
+    );
 }
