@@ -17,7 +17,7 @@
 -}
 
 
-module Page.NotFound exposing (..)
+module Page.NotFound exposing (view)
 
 import Html exposing (Html)
 

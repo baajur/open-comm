@@ -33,9 +33,9 @@ port module Api exposing
 import Api.Endpoint as Endpoint exposing (Endpoint)
 import Browser
 import Browser.Navigation as Nav
-import Http exposing (Body, Expect)
+import Http exposing (Body)
 import Json.Decode as Decode exposing (Decoder, Value)
-import Json.Decode.Pipeline as Pipeline exposing (required)
+import Json.Decode.Pipeline exposing (required)
 import Json.Encode as Encode exposing (object, string)
 import Url exposing (Url)
 
@@ -215,38 +215,6 @@ type alias CmdMsg a msg =
     Result Http.Error a -> msg
 
 
-get : Endpoint -> Maybe User -> Decoder a -> CmdMsg a msg -> Cmd msg
-get url maybeUser decoder msgFromHttp =
-    Endpoint.request
-        { method = "GET"
-        , url = url
-        , expect = Http.expectJson msgFromHttp decoder
-        , headers =
-            case maybeUser of
-                Just cred ->
-                    [ authHeader cred ]
-
-                Nothing ->
-                    []
-        , body = Http.emptyBody
-        , timeout = Nothing
-        , tracker = Nothing
-        }
-
-
-put : Endpoint -> User -> Body -> Decoder a -> CmdMsg a msg -> Cmd msg
-put url tok body decoder msgFromHttp =
-    Endpoint.request
-        { method = "PUT"
-        , url = url
-        , expect = Http.expectJson msgFromHttp decoder
-        , headers = [ authHeader tok ]
-        , body = body
-        , timeout = Nothing
-        , tracker = Nothing
-        }
-
-
 post : Endpoint -> Maybe User -> Body -> Decoder a -> CmdMsg a msg -> Cmd msg
 post url maybeUser body decoder msgFromHttp =
     Endpoint.request
@@ -266,14 +234,43 @@ post url maybeUser body decoder msgFromHttp =
         }
 
 
-delete : Endpoint -> User -> Body -> Decoder a -> CmdMsg a msg -> Cmd msg
-delete url tok body decoder msgFromHttp =
-    Endpoint.request
-        { method = "DELETE"
-        , url = url
-        , expect = Http.expectJson msgFromHttp decoder
-        , headers = [ authHeader tok ]
-        , body = body
-        , timeout = Nothing
-        , tracker = Nothing
-        }
+
+-- get : Endpoint -> Maybe User -> Decoder a -> CmdMsg a msg -> Cmd msg
+-- get url maybeUser decoder msgFromHttp =
+--     Endpoint.request
+--         { method = "GET"
+--         , url = url
+--         , expect = Http.expectJson msgFromHttp decoder
+--         , headers =
+--             case maybeUser of
+--                 Just cred ->
+--                     [ authHeader cred ]
+--
+--                 Nothing ->
+--                     []
+--         , body = Http.emptyBody
+--         , timeout = Nothing
+--         , tracker = Nothing
+--         }
+-- put : Endpoint -> User -> Body -> Decoder a -> CmdMsg a msg -> Cmd msg
+-- put url tok body decoder msgFromHttp =
+--     Endpoint.request
+--         { method = "PUT"
+--         , url = url
+--         , expect = Http.expectJson msgFromHttp decoder
+--         , headers = [ authHeader tok ]
+--         , body = body
+--         , timeout = Nothing
+--         , tracker = Nothing
+--         }
+-- delete : Endpoint -> User -> Body -> Decoder a -> CmdMsg a msg -> Cmd msg
+-- delete url tok body decoder msgFromHttp =
+--     Endpoint.request
+--         { method = "DELETE"
+--         , url = url
+--         , expect = Http.expectJson msgFromHttp decoder
+--         , headers = [ authHeader tok ]
+--         , body = body
+--         , timeout = Nothing
+--         , tracker = Nothing
+--         }

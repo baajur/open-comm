@@ -17,13 +17,13 @@
 -}
 
 
-module Main exposing (..)
+module Main exposing (main)
 
 import Api exposing (User)
 import Browser
 import Browser.Navigation as Nav
 import Html
-import Json.Decode as Decode exposing (Value)
+import Json.Decode exposing (Value)
 import Page
 import Page.Blank as Blank
 import Page.Home as Home
@@ -126,15 +126,15 @@ changeRouteTo maybeRoute model =
 
         Just Route.Login ->
             Login.init session
-                |> updateWith Login GotLoginMsg model
+                |> updateWith Login GotLoginMsg
 
         Just Route.Register ->
             Register.init session
-                |> updateWith Register GotRegisterMsg model
+                |> updateWith Register GotRegisterMsg
 
         Just Route.Home ->
             Home.init session
-                |> updateWith Home GotHomeMsg model
+                |> updateWith Home GotHomeMsg
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -152,15 +152,15 @@ update msg model =
 
         ( GotLoginMsg subMsg, Login subModel ) ->
             Login.update subMsg subModel
-                |> updateWith Login GotLoginMsg model
+                |> updateWith Login GotLoginMsg
 
         ( GotRegisterMsg subMsg, Register subModel ) ->
             Register.update subMsg subModel
-                |> updateWith Register GotRegisterMsg model
+                |> updateWith Register GotRegisterMsg
 
         ( GotHomeMsg subMsg, Home subModel ) ->
             Home.update subMsg subModel
-                |> updateWith Home GotHomeMsg model
+                |> updateWith Home GotHomeMsg
 
         ( ChangeUrl url, _ ) ->
             changeRouteTo (Route.fromUrl url) model
@@ -177,10 +177,9 @@ update msg model =
 updateWith :
     (subModel -> Model)
     -> (subMsg -> Msg)
-    -> Model
     -> ( subModel, Cmd subMsg )
     -> ( Model, Cmd Msg )
-updateWith toModel toMsg model ( subModel, subCmd ) =
+updateWith toModel toMsg ( subModel, subCmd ) =
     ( toModel subModel
     , Cmd.map toMsg subCmd
     )

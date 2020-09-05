@@ -17,26 +17,34 @@
 -}
 
 
-module Page.Home exposing (..)
+module Page.Home exposing
+    ( Model
+    , Msg
+    , init
+    , subscriptions
+    , toSession
+    , update
+    , view
+    )
 
-import Api exposing (User)
+import Api
 import Html exposing (Html)
 import Html.Events as Events
 import Session exposing (Session)
 
 
-type alias Model =
-    { session : Session }
+type Model
+    = Model Session
 
 
 toSession : Model -> Session
-toSession { session } =
+toSession (Model session) =
     session
 
 
 init : Session -> ( Model, Cmd Msg )
 init session =
-    ( { session = session }, Cmd.none )
+    ( Model session, Cmd.none )
 
 
 type Msg
@@ -45,10 +53,10 @@ type Msg
 
 
 view : Model -> { title : String, content : Html Msg }
-view model =
+view (Model session) =
     { title = "Home"
     , content =
-        case model.session of
+        case session of
             Session.LoggedIn _ user ->
                 Html.div []
                     [ Html.h1 [] [ Html.text (Api.username user) ]
@@ -68,9 +76,9 @@ update msg model =
             ( model, Api.logout )
 
         GotSession s ->
-            ( { model | session = s }, Cmd.none )
+            ( Model s, Cmd.none )
 
 
 subscriptions : Model -> Sub Msg
-subscriptions { session } =
+subscriptions (Model session) =
     Session.onChange GotSession (Session.navKey session)

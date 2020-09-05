@@ -17,15 +17,22 @@
 -}
 
 
-module Page.Register exposing (..)
+module Page.Register exposing
+    ( Model
+    , Msg
+    , init
+    , subscriptions
+    , toSession
+    , update
+    , view
+    )
 
 import Api exposing (RegisterForm, register)
-import Browser exposing (Document)
 import Html exposing (Html)
 import Html.Attributes as Attr
 import Html.Events as Events
 import Http
-import Route exposing (Route)
+import Route
 import Session exposing (Session)
 
 
@@ -145,17 +152,20 @@ update msg model =
         EnteredRepeatPassword passwordRepeat ->
             updateForm (\form -> { form | passwordRepeat = passwordRepeat }) model
 
-        CompletedRegistration (Err (Http.BadStatus 409)) ->
-            ( { model | problems = ServerError "Username is taken." :: model.problems }
-            , Cmd.none
-            )
-
-        CompletedRegistration (Err n) ->
+        CompletedRegistration (Err e) ->
             let
-                msg =
-                    "Internal error (" + Int.toString n + ")."
+                errMsg =
+                    case e of
+                        Http.BadStatus 409 ->
+                            "Username is taken."
+
+                        Http.BadStatus n ->
+                            "Internal error (" ++ String.fromInt n ++ ")."
+
+                        _ ->
+                            "Unknown error."
             in
-            ( { model | problems = ServerError msg :: model.problems }
+            ( { model | problems = ServerError errMsg :: model.problems }
             , Cmd.none
             )
 

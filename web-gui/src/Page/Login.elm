@@ -17,15 +17,22 @@
 -}
 
 
-module Page.Login exposing (..)
+module Page.Login exposing
+    ( Model
+    , Msg
+    , init
+    , subscriptions
+    , toSession
+    , update
+    , view
+    )
 
 import Api exposing (LoginForm, login)
-import Browser exposing (Document)
 import Html exposing (Html)
 import Html.Attributes as Attr
 import Html.Events as Events
 import Http
-import Route exposing (Route)
+import Route
 import Session exposing (Session)
 
 
@@ -127,7 +134,7 @@ update msg model =
         EnteredPassword password ->
             updateForm (\form -> { form | password = password }) model
 
-        CompletedLogin (Err error) ->
+        CompletedLogin (Err _) ->
             ( { model | problems = ServerError "Login failed." :: model.problems }
             , Cmd.none
             )
