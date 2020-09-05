@@ -22,6 +22,16 @@ use serde::{Deserialize, Serialize};
 
 use super::schema::{user_auths, users};
 
+#[rocket_contrib::database("user_db")]
+#[repr(transparent)]
+pub struct UserDbConn(diesel::PgConnection);
+
+#[derive(Debug)]
+pub struct JWTKey<'a> {
+    pub encoder: jsonwebtoken::EncodingKey,
+    pub decoder: jsonwebtoken::DecodingKey<'a>,
+}
+
 #[derive(Identifiable, Queryable, PartialEq, Debug)]
 pub struct User {
     pub id: i32,
@@ -29,7 +39,7 @@ pub struct User {
 }
 
 #[derive(Serialize, Deserialize)]
-pub struct UserToken {
+pub struct BearerToken {
     pub iat: u64,
     pub exp: u64,
     pub username: String,
