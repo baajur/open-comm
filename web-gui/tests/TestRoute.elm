@@ -16,17 +16,17 @@ suite =
             [ test "parses login" <|
                 \_ ->
                     Expect.equal
-                        (Maybe.andThen Route.fromUrl (Url.fromString "https://example.com/login"))
+                        (Maybe.andThen Route.fromUrl (Url.fromString "https://example.com/#/login"))
                         (Just Route.Login)
             , test "parses register" <|
                 \_ ->
                     Expect.equal
-                        (Maybe.andThen Route.fromUrl (Url.fromString "https://example.com/register"))
+                        (Maybe.andThen Route.fromUrl (Url.fromString "https://example.com/#/register"))
                         (Just Route.Register)
             , test "parses home" <|
                 \_ ->
                     Expect.equal
-                        (Maybe.andThen Route.fromUrl (Url.fromString "https://example.com"))
+                        (Maybe.andThen Route.fromUrl (Url.fromString "https://example.com/#/"))
                         (Just Route.Home)
             ]
         ]

@@ -20,7 +20,6 @@
 
 use std::{
     iter,
-    path::PathBuf,
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -211,18 +210,13 @@ fn generate_jwt(username: String, key: &JWTKey) -> String {
     jwt_encode(&JWTHeader::default(), &payload, &key.encoder).expect("Unable to encode JWT.")
 }
 
-#[get("/elm.js", rank = 1)]
+#[get("/elm.js")]
 fn gui_lib() -> JavaScript<&'static str> {
     JavaScript(include_str!(env!("GUI_LIB")))
 }
 
 #[get("/")]
-fn gui_root() -> Html<&'static str> {
-    Html(include_str!(env!("GUI_INDEX")))
-}
-
-#[get("/<_p..>", rank = 2)]
-fn gui(_p: PathBuf) -> Html<&'static str> {
+fn gui() -> Html<&'static str> {
     Html(include_str!(env!("GUI_INDEX")))
 }
 
@@ -246,7 +240,7 @@ fn main() {
                 Ok(r)
             }
         }))
-        .mount("/", routes![gui_root, gui, gui_lib])
+        .mount("/", routes![gui, gui_lib])
         .mount("/api", routes![user_profile, register, login])
         .manage(jwt_key)
         .launch();

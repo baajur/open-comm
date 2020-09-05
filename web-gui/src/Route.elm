@@ -65,13 +65,14 @@ parser =
 
 
 fromUrl : Url -> Maybe Route
-fromUrl =
-    Parser.parse parser
+fromUrl url =
+    { url | path = Maybe.withDefault "" url.fragment, fragment = Nothing }
+        |> Parser.parse parser
 
 
 showRoute : Route -> String
 showRoute route =
-    "/" ++ Builder.relative (breakRoute route) []
+    "#/" ++ Builder.relative (breakRoute route) []
 
 
 breakRoute : Route -> List String
