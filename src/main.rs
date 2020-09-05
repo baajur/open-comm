@@ -127,21 +127,24 @@ fn login(
     let mut login = login_form.into_inner();
     let UserDbConn(conn) = db;
 
-    let query_res: Result<(String, String), _> = users::table
-        .inner_join(user_auths::table.on(user_auths::user_id.eq(users::id)))
+    let user: User = users::table
         .filter(users::username.eq(login.username.as_str()))
-        .select((user_auths::password_hash, user_auths::salt))
-        .first(&conn);
+        .first(&conn)
+        .map_err(|_| Status::Unauthorized)?;
 
-    if let Ok((password_hash, salt)) = query_res {
-        login.password.extend(salt.chars());
-        if secure_hash(login.password) == password_hash {
-            // Add the JWT as a cookie.
-            let token = generate_jwt(login.username.clone(), jwt_key.inner());
-            return Ok(Json(LoginResp { token }));
-        }
+    let (password_hash, salt): (String, String) = UserAuth::belonging_to(&user)
+        .select((user_auths::password_hash, user_auths::salt))
+        .first(&conn)
+        .map_err(|_| Status::Unauthorized)?;
+
+    login.password.extend(salt.chars());
+
+    if secure_hash(login.password) == password_hash {
+        let token = generate_jwt(login.username.clone(), jwt_key.inner());
+        Ok(Json(LoginResp { token }))
+    } else {
+        Err(Status::Unauthorized)
     }
-    Err(Status::Unauthorized)
 }
 
 #[derive(Debug)]

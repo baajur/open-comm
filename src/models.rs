@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize};
 
 use super::schema::{user_auths, users};
 
-#[derive(Queryable)]
+#[derive(Identifiable, Queryable, PartialEq, Debug)]
 pub struct User {
     pub id: i32,
     pub username: String,
@@ -41,7 +41,8 @@ pub struct NewUser {
     pub username: String,
 }
 
-#[derive(Queryable)]
+#[derive(Identifiable, Queryable, Associations, PartialEq, Debug)]
+#[belongs_to(User)]
 pub struct UserAuth {
     pub id: i32,
     pub user_id: i32,
