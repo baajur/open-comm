@@ -32,6 +32,7 @@ import Html exposing (Html)
 import Html.Attributes as Attr
 import Html.Events as Events
 import Http
+import Page
 import Route
 import Session exposing (Session)
 
@@ -90,32 +91,32 @@ view : Model -> { title : String, content : Html Msg }
 view { form, problems } =
     { title = "Register"
     , content =
-        Html.form [ Events.onSubmit SubmittedForm ]
-            ([ Html.input
-                [ Attr.placeholder "Username"
-                , Events.onInput EnteredUsername
-                , Attr.value form.username
+        Html.div []
+            [ Html.form [ Events.onSubmit SubmittedForm ]
+                [ Html.input
+                    [ Attr.placeholder "Username"
+                    , Events.onInput EnteredUsername
+                    , Attr.value form.username
+                    ]
+                    []
+                , Html.input
+                    [ Attr.placeholder "Password"
+                    , Events.onInput EnteredPassword
+                    , Attr.value form.password
+                    ]
+                    []
+                , Html.input
+                    [ Attr.placeholder "Repeat Password"
+                    , Events.onInput EnteredRepeatPassword
+                    , Attr.value form.passwordRepeat
+                    ]
+                    []
+                , Html.button []
+                    [ Html.text "Sign in" ]
                 ]
-                []
-             , Html.input
-                [ Attr.placeholder "Password"
-                , Events.onInput EnteredPassword
-                , Attr.value form.password
-                ]
-                []
-             , Html.input
-                [ Attr.placeholder "Repeat Password"
-                , Events.onInput EnteredRepeatPassword
-                , Attr.value form.passwordRepeat
-                ]
-                []
-             , Html.button []
-                [ Html.text "Sign in" ]
-             ]
-                ++ List.map
-                    (\s -> Html.p [] [ Html.text (showProblem s) ])
-                    problems
-            )
+            , List.map showProblem problems
+                |> Page.viewErrors ClickedDismissErrors
+            ]
     }
 
 
@@ -126,6 +127,7 @@ type Msg
     | EnteredRepeatPassword String
     | CompletedRegistration (Result Http.Error Api.User)
     | GotSession Session
+    | ClickedDismissErrors
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -177,6 +179,11 @@ update msg model =
         GotSession s ->
             ( { model | session = s }
             , Route.pushUrl (Session.navKey s) Route.Home
+            )
+
+        ClickedDismissErrors ->
+            ( { model | problems = [] }
+            , Cmd.none
             )
 
 

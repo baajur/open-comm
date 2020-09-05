@@ -17,18 +17,32 @@
 -}
 
 
-module Route exposing (Route(..), fromUrl, pushUrl, replaceUrl, showRoute)
+module Route exposing
+    ( Route(..)
+    , fromUrl
+    , href
+    , pushUrl
+    , replaceUrl
+    , showRoute
+    )
 
 import Browser.Navigation as Nav
+import Html exposing (Attribute)
+import Html.Attributes as Attr
 import Url exposing (Url)
 import Url.Builder as Builder
-import Url.Parser as Parser exposing (Parser, oneOf, s, string)
+import Url.Parser as Parser exposing (Parser, oneOf, s)
 
 
 type Route
     = Login
     | Register
     | Home
+
+
+href : Route -> Attribute msg
+href targetRoute =
+    Attr.href (showRoute targetRoute)
 
 
 replaceUrl : Nav.Key -> Route -> Cmd msg
