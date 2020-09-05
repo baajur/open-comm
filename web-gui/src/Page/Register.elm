@@ -145,8 +145,17 @@ update msg model =
         EnteredRepeatPassword passwordRepeat ->
             updateForm (\form -> { form | passwordRepeat = passwordRepeat }) model
 
-        CompletedRegistration (Err error) ->
-            ( { model | problems = ServerError "Registration failed." :: model.problems }
+        CompletedRegistration (Err (Http.BadStatus 409)) ->
+            ( { model | problems = ServerError "Username is taken." :: model.problems }
+            , Cmd.none
+            )
+
+        CompletedRegistration (Err n) ->
+            let
+                msg =
+                    "Internal error (" + Int.toString n + ")."
+            in
+            ( { model | problems = ServerError msg :: model.problems }
             , Cmd.none
             )
 

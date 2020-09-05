@@ -29,6 +29,7 @@ in
                       --name open-comm-dev-db \
                       -e POSTGRES_HOST_AUTH_METHOD=trust \
                       -e POSTGRES_USER=postgres \
+                      -v open-comm-dev-db:/var/lib/postgresql/data \
                       postgres
       fi
       dbip=$(

@@ -28,19 +28,23 @@ use std::{
 extern crate rocket;
 
 use rocket::{
+    fairing::AdHoc,
     http::Status,
     request::{FromRequest, Outcome, Request, State},
-    response::{
-        content::{Html, JavaScript},
-        status::*,
-    },
+    response::content::{Html, JavaScript},
 };
 use rocket_contrib::{databases::database, json::Json};
 
 #[macro_use]
 extern crate diesel;
 
-use diesel::prelude::*;
+use diesel::{
+    prelude::*,
+    result::{DatabaseErrorKind::UniqueViolation, Error::DatabaseError},
+};
+
+#[macro_use]
+extern crate diesel_migrations;
 
 use jsonwebtoken::{
     decode as jwt_decode, encode as jwt_encode, errors::ErrorKind as JWTErrorKind, DecodingKey,
@@ -69,8 +73,8 @@ fn user_profile(user_token: UserToken) -> String {
 fn register(
     db: UserDbConn,
     jwt_key: State<JWTKey>,
-    new_user_form: Json<NewUserForm>,
-) -> Result<Json<NewUserResp>, Conflict<()>> {
+    new_user_form: Json<RegisterForm>,
+) -> Result<Json<RegisterResp>, Status> {
     use schema::{user_auths, users};
 
     let mut new_user = new_user_form.into_inner();
@@ -102,9 +106,13 @@ fn register(
 
             // Add the JWT as a cookie.
             let token = generate_jwt(user.username.clone(), &jwt_key.inner());
-            Ok(Json(NewUserResp { token }))
+            Ok(Json(RegisterResp { token }))
         }
-        _ => Err(Conflict(None)),
+        Err(DatabaseError(UniqueViolation, _)) => Err(Status::Conflict),
+        Err(e) => {
+            println!("{:?}", e);
+            Err(Status::InternalServerError)
+        }
     }
 }
 
@@ -113,7 +121,7 @@ fn login(
     db: UserDbConn,
     jwt_key: State<JWTKey>,
     login_form: Json<LoginForm>,
-) -> Result<Json<LoginResp>, Unauthorized<()>> {
+) -> Result<Json<LoginResp>, Status> {
     use schema::{user_auths, users};
 
     let mut login = login_form.into_inner();
@@ -130,13 +138,10 @@ fn login(
         if secure_hash(login.password) == password_hash {
             // Add the JWT as a cookie.
             let token = generate_jwt(login.username.clone(), jwt_key.inner());
-            Ok(Json(LoginResp { token }))
-        } else {
-            Err(Unauthorized(None))
+            return Ok(Json(LoginResp { token }));
         }
-    } else {
-        Err(Unauthorized(None))
     }
+    Err(Status::Unauthorized)
 }
 
 #[derive(Debug)]
@@ -218,6 +223,8 @@ fn gui(_p: PathBuf) -> Html<&'static str> {
     Html(include_str!(env!("GUI_INDEX")))
 }
 
+embed_migrations!("migrations");
+
 fn main() {
     let secret = b"secret";
     let jwt_key = JWTKey {
@@ -226,6 +233,16 @@ fn main() {
     };
     rocket::ignite()
         .attach(UserDbConn::fairing())
+        .attach(AdHoc::on_attach("Run migrations", |r| {
+            if let Some(conn) = UserDbConn::get_one(&r) {
+                match embedded_migrations::run(&conn.0) {
+                    Ok(_) => Ok(r),
+                    Err(_) => Err(r),
+                }
+            } else {
+                Ok(r)
+            }
+        }))
         .mount("/", routes![gui_root, gui, gui_lib])
         .mount("/api", routes![user_profile, register, login])
         .manage(jwt_key)

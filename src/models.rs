@@ -58,13 +58,13 @@ pub struct NewUserAuth {
 }
 
 #[derive(FromForm, Deserialize)]
-pub struct NewUserForm {
+pub struct RegisterForm {
     pub username: String,
     pub password: String,
 }
 
 #[derive(Serialize)]
-pub struct NewUserResp {
+pub struct RegisterResp {
     pub token: String,
 }
 
