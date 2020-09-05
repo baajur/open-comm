@@ -29,11 +29,15 @@ fn main() {
         "release" => "--optimize",
         _ => "--debug",
     };
-    Command::new("elm")
+    let build_status = Command::new("elm")
         .args(&["make", profile_flag, "src/Main.elm", output_arg.as_str()])
         .current_dir("web-gui")
         .status()
         .expect("Failed to build web-gui.");
+
+    if !build_status.success() {
+        std::process::exit(1);
+    }
     println!("cargo:rustc-env=GUI_LIB={}", gui_lib_path_str);
 
     let gui_index_path = out_dir.join("index.html");
