@@ -47,6 +47,7 @@ pub fn routes() -> Vec<Route> {
         create_user_card,
         list_user_cards,
         update_user_card,
+        delete_user_card,
     ]
 }
 
@@ -288,4 +289,30 @@ pub fn update_user_card<'a>(
     };
 
     Ok(Json(update_res))
+}
+
+#[delete("/api/user/<username>/cards/private?<phrase>")]
+pub fn delete_user_card<'a>(
+    db: DbConn,
+    _user_tok: UserToken,
+    username: String,
+    phrase: String,
+) -> Result<(), Error> {
+    use crate::schema::{user_cards, users};
+    let DbConn(conn) = db;
+
+    let user_id: i32 = users::table
+        .filter(users::username.eq(username.as_str()))
+        .select(users::id)
+        .first(&conn)?;
+
+    diesel::delete(user_cards::table)
+        .filter(
+            user_cards::user_id
+                .eq(user_id)
+                .and(user_cards::phrase.eq(phrase)),
+        )
+        .execute(&conn)?;
+
+    Ok(())
 }
