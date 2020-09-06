@@ -18,6 +18,8 @@
 
 #![feature(proc_macro_hygiene, decl_macro)]
 
+use std::{env, path::PathBuf};
+
 #[macro_use]
 extern crate rocket;
 
@@ -35,6 +37,7 @@ extern crate diesel_migrations;
 use jsonwebtoken::{DecodingKey, EncodingKey};
 
 pub mod auth;
+pub mod card;
 pub mod models;
 pub mod schema;
 
@@ -59,9 +62,9 @@ fn main() {
         decoder: DecodingKey::from_secret(secret),
     };
     rocket::ignite()
-        .attach(UserDbConn::fairing())
+        .attach(DbConn::fairing())
         .attach(AdHoc::on_attach("Run migrations", |r| {
-            if let Some(conn) = UserDbConn::get_one(&r) {
+            if let Some(conn) = DbConn::get_one(&r) {
                 match embedded_migrations::run(&conn.0) {
                     Ok(_) => Ok(r),
                     Err(_) => Err(r),
@@ -70,8 +73,20 @@ fn main() {
                 Ok(r)
             }
         }))
+        .attach(AdHoc::on_attach("Add data dir path", |r| {
+            let data_dir = match r.config().get_string("DATA_DIR") {
+                Ok(d) => PathBuf::from(d),
+                _ => match env::var("XDG_DATA_HOME") {
+                    Ok(parent) => PathBuf::from(parent),
+                    _ => PathBuf::from(env::var("HOME").unwrap()).join(".local"),
+                }
+                .join("open-comm"),
+            };
+            Ok(r.manage(DataDir(data_dir)))
+        }))
         .mount("/", routes![gui, gui_lib])
-        .mount("/api", routes![auth::register, auth::login])
+        .mount("/", auth::routes())
+        .mount("/", card::routes())
         .manage(jwt_key)
         .launch();
 }

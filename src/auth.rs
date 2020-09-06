@@ -24,6 +24,7 @@ use std::{
 use rocket::{
     http::Status,
     request::{FromRequest, Outcome, Request, State},
+    Route,
 };
 use rocket_contrib::json::Json;
 
@@ -43,63 +44,62 @@ use rand::{distributions::Alphanumeric, thread_rng, Rng};
 
 use crate::models::*;
 
-#[post("/register", data = "<new_user_form>")]
+pub fn routes() -> Vec<Route> {
+    routes![register, login]
+}
+
+#[post("/api/register", data = "<new_user_form>")]
 pub fn register(
-    db: UserDbConn,
+    db: DbConn,
     jwt_key: State<JWTKey>,
     new_user_form: Json<RegisterForm>,
 ) -> Result<Json<RegisterResp>, Status> {
     use crate::schema::{user_auths, users};
 
     let mut new_user = new_user_form.into_inner();
-    let UserDbConn(conn) = db;
+    let DbConn(conn) = db;
 
     // Insert the user.
     let user: NewUser = NewUser {
         username: new_user.username.clone(),
     };
-    let new_user_res = diesel::insert_into(users::table)
+    let user_id = diesel::insert_into(users::table)
         .values(&user)
         .returning(users::id)
-        .get_result(&conn);
+        .get_result(&conn)
+        .map_err(|e| match e {
+            DatabaseError(UniqueViolation, _) => Status::Conflict,
+            _ => Status::InternalServerError,
+        })?;
 
-    match new_user_res {
-        Ok(user_id) => {
-            // Hash and insert the user credentials.
-            let salt = random_string(10);
-            new_user.password.extend(salt.chars());
-            let user_auth: NewUserAuth = NewUserAuth {
-                user_id,
-                salt,
-                password_hash: secure_hash(new_user.password),
-            };
-            diesel::insert_into(user_auths::table)
-                .values(&user_auth)
-                .execute(&conn)
-                .expect("Unable to insert new user auth into database.");
+    // Hash and insert the user credentials.
+    let salt = random_string(10);
+    new_user.password.extend(salt.chars());
+    let user_auth: NewUserAuth = NewUserAuth {
+        user_id,
+        salt,
+        password_hash: secure_hash(new_user.password),
+    };
+    diesel::insert_into(user_auths::table)
+        .values(&user_auth)
+        .execute(&conn)
+        .map_err(|_| Status::InternalServerError)?;
 
-            // Add the JWT as a cookie.
-            let token = generate_jwt(user.username.clone(), &jwt_key.inner());
-            Ok(Json(RegisterResp { token }))
-        }
-        Err(DatabaseError(UniqueViolation, _)) => Err(Status::Conflict),
-        Err(e) => {
-            println!("{:?}", e);
-            Err(Status::InternalServerError)
-        }
-    }
+    // Add the JWT as a cookie.
+    let token = generate_jwt(user.username.clone(), &jwt_key.inner());
+    Ok(Json(RegisterResp { token }))
 }
 
-#[post("/login", data = "<login_form>")]
+#[post("/api/login", data = "<login_form>")]
 pub fn login(
-    db: UserDbConn,
+    db: DbConn,
     jwt_key: State<JWTKey>,
     login_form: Json<LoginForm>,
 ) -> Result<Json<LoginResp>, Status> {
     use crate::schema::{user_auths, users};
 
     let mut login = login_form.into_inner();
-    let UserDbConn(conn) = db;
+    let DbConn(conn) = db;
 
     let user: User = users::table
         .filter(users::username.eq(login.username.as_str()))
@@ -121,33 +121,72 @@ pub fn login(
     }
 }
 
+impl BearerToken {
+    fn verify_token<'a>(request: &'a Request<'_>, raw_jwt: &'a str) -> Result<Self, AuthError> {
+        let jwt_key = request.guard::<State<JWTKey>>().unwrap();
+        let jwt_validation = Validation {
+            leeway: 60,
+            ..Default::default()
+        };
+        let decode_res =
+            jwt_decode::<BearerToken>(raw_jwt, &jwt_key.inner().decoder, &jwt_validation);
+        match decode_res {
+            Ok(token) => Ok(token.claims),
+            Err(err) => match err.into_kind() {
+                JWTErrorKind::ExpiredSignature => Err(AuthError::Expired),
+                _ => Err(AuthError::Invalid),
+            },
+        }
+    }
+}
+
 impl<'a, 'r> FromRequest<'a, 'r> for BearerToken {
     type Error = AuthError;
 
     fn from_request(request: &'a Request<'r>) -> Outcome<Self, Self::Error> {
-        match request.cookies().get_private("auth-jwt") {
-            Some(raw_jwt) => {
-                let jwt_key = request.guard::<State<JWTKey>>().unwrap();
-                let jwt_validation = Validation {
-                    leeway: 60,
-                    ..Default::default()
-                };
-                let decode_res = jwt_decode::<BearerToken>(
-                    raw_jwt.value(),
-                    &jwt_key.inner().decoder,
-                    &jwt_validation,
-                );
-                match decode_res {
-                    Ok(token) => Outcome::Success(token.claims),
-                    Err(err) => match err.into_kind() {
-                        JWTErrorKind::ExpiredSignature => {
-                            Outcome::Failure((Status::Unauthorized, AuthError::Expired))
-                        }
-                        _ => Outcome::Failure((Status::Unauthorized, AuthError::Invalid)),
-                    },
+        let mut res: Result<Self, Self::Error> = Err(AuthError::Missing);
+        for bearer in request.headers().get("Authorization") {
+            res = match bearer.get("Bearer ".len()..) {
+                Some(raw_jwt) => match BearerToken::verify_token(request, raw_jwt) {
+                    Ok(verified) => Ok(verified),
+                    Err(e) => Err(e),
+                },
+                None => Err(AuthError::Invalid),
+            };
+        }
+        if res.is_err() {
+            res = match request.get_query_value::<String>("access_token") {
+                Some(Ok(raw_jwt)) => match BearerToken::verify_token(request, raw_jwt.as_str()) {
+                    Ok(verified) => Ok(verified),
+                    Err(e) => Err(e),
+                },
+                _ => Err(AuthError::Missing),
+            };
+        }
+        match res {
+            Ok(verified) => Outcome::Success(verified),
+            Err(e) => Outcome::Failure((Status::Unauthorized, e)),
+        }
+    }
+}
+
+impl<'a, 'r> FromRequest<'a, 'r> for UserToken {
+    type Error = AuthError;
+
+    fn from_request(request: &'a Request<'r>) -> Outcome<Self, Self::Error> {
+        match BearerToken::from_request(request) {
+            Outcome::Success(verified) => {
+                let path = request.uri().path();
+                if path.starts_with(format!("/api/user/{}", verified.username).as_str()) {
+                    Outcome::Success(UserToken(verified))
+                } else if path.starts_with("/api/user") {
+                    Outcome::Failure((Status::Unauthorized, AuthError::Invalid))
+                } else {
+                    panic!("Attempted to use a `UserToken` for a non-user API.");
                 }
             }
-            None => Outcome::Failure((Status::Unauthorized, AuthError::Missing)),
+            Outcome::Failure(e) => Outcome::Failure(e),
+            Outcome::Forward(e) => Outcome::Forward(e),
         }
     }
 }
