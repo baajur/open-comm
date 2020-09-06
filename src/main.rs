@@ -38,8 +38,11 @@ use jsonwebtoken::{DecodingKey, EncodingKey};
 
 pub mod auth;
 pub mod card;
+mod error;
 pub mod models;
 pub mod schema;
+
+pub use error::*;
 
 use models::*;
 

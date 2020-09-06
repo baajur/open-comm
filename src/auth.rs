@@ -28,10 +28,7 @@ use rocket::{
 };
 use rocket_contrib::json::Json;
 
-use diesel::{
-    prelude::*,
-    result::{DatabaseErrorKind::UniqueViolation, Error::DatabaseError},
-};
+use diesel::prelude::*;
 
 use jsonwebtoken::{
     decode as jwt_decode, encode as jwt_encode, errors::ErrorKind as JWTErrorKind,
@@ -42,7 +39,7 @@ use crypto::{digest::Digest, sha3::Sha3};
 
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
 
-use crate::models::*;
+use crate::{models::*, Error};
 
 pub fn routes() -> Vec<Route> {
     routes![register, login]
@@ -53,7 +50,7 @@ pub fn register(
     db: DbConn,
     jwt_key: State<JWTKey>,
     new_user_form: Json<RegisterForm>,
-) -> Result<Json<RegisterResp>, Status> {
+) -> Result<Json<RegisterResp>, Error> {
     use crate::schema::{user_auths, users};
 
     let mut new_user = new_user_form.into_inner();
@@ -66,11 +63,7 @@ pub fn register(
     let user_id = diesel::insert_into(users::table)
         .values(&user)
         .returning(users::id)
-        .get_result(&conn)
-        .map_err(|e| match e {
-            DatabaseError(UniqueViolation, _) => Status::Conflict,
-            _ => Status::InternalServerError,
-        })?;
+        .get_result(&conn)?;
 
     // Hash and insert the user credentials.
     let salt = random_string(10);
@@ -82,8 +75,7 @@ pub fn register(
     };
     diesel::insert_into(user_auths::table)
         .values(&user_auth)
-        .execute(&conn)
-        .map_err(|_| Status::InternalServerError)?;
+        .execute(&conn)?;
 
     // Add the JWT as a cookie.
     let token = generate_jwt(user.username.clone(), &jwt_key.inner());
@@ -104,6 +96,8 @@ pub fn login(
     let user: User = users::table
         .filter(users::username.eq(login.username.as_str()))
         .first(&conn)
+        // This intentionally returns unauthorized for missing users, so people can't just query a
+        // name and see if it exists.
         .map_err(|_| Status::Unauthorized)?;
 
     let (password_hash, salt): (String, String) = UserAuth::belonging_to(&user)

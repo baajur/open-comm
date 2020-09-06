@@ -23,32 +23,30 @@ use std::{
 };
 
 use rocket::{
-    http::{uri::Uri, Status},
+    http::uri::Uri,
     response::{status::Created, NamedFile},
     Data, Route, State,
 };
 use rocket_contrib::json::Json;
 
-use diesel::{
-    prelude::*,
-    result::{DatabaseErrorKind::UniqueViolation, Error::DatabaseError},
-};
+use diesel::prelude::*;
 
 use crypto::{digest::Digest, sha3::Sha3};
 use tempfile::NamedTempFile;
 
-use crate::models::*;
+use crate::{models::*, Error};
 
 const PAGE_LIMIT: i64 = 100;
 const IMG_LIMIT: i64 = 1000000;
 pub fn routes() -> Vec<Route> {
     routes![
-        upload_user_img,
+        create_user_img,
         list_user_images,
-        user_image,
-        new_user_card,
-        user_cards,
-        patch_user_card
+        read_user_image,
+        // CRUD card entries.
+        create_user_card,
+        list_user_cards,
+        update_user_card,
     ]
 }
 
@@ -57,28 +55,25 @@ pub fn routes() -> Vec<Route> {
     format = "image/png",
     data = "<img>"
 )]
-pub fn upload_user_img<'a>(
+pub fn create_user_img<'a>(
     _user_tok: UserToken,
     data_dir: State<DataDir>,
     username: String,
     img: Data,
-) -> Result<Created<()>, Status> {
+) -> Result<Created<()>, Error> {
     let DataDir(data_dir) = data_dir.inner();
-    let file = NamedTempFile::new().map_err(|_| Status::InternalServerError)?;
+    let file = NamedTempFile::new()?;
     let mut hasher = Sha3::sha3_224();
     let mut reader = BufReader::new(img.open());
     loop {
-        let consumed = reader
-            .fill_buf()
-            .and_then(|bytes| {
-                if bytes.len() > 0 {
-                    hasher.input(bytes);
-                    file.as_file().write(bytes)
-                } else {
-                    Ok(0)
-                }
-            })
-            .map_err(|_| Status::InternalServerError)?;
+        let consumed = reader.fill_buf().and_then(|bytes| {
+            if bytes.len() > 0 {
+                hasher.input(bytes);
+                file.as_file().write(bytes)
+            } else {
+                Ok(0)
+            }
+        })?;
         if consumed == 0 {
             break;
         }
@@ -88,15 +83,15 @@ pub fn upload_user_img<'a>(
         .join("images")
         .join("private")
         .join(username.as_str());
-    fs::create_dir_all(parent.as_path()).map_err(|_| Status::InternalServerError)?;
+    fs::create_dir_all(parent.as_path())?;
     let path = parent.join(hasher.result_str()).with_extension("png");
     if path.exists() {
-        Err(Status::Conflict)
+        Err(Error::Conflict)
     } else {
-        fs::copy(file.path(), path.as_path()).map_err(|_| Status::InternalServerError)?;
+        fs::copy(file.path(), path.as_path())?;
         Ok(Created(
             uri!(
-                user_image: username = username,
+                read_user_image: username = username,
                 name = path.file_name().unwrap().to_str().unwrap()
             )
             .to_string(),
@@ -110,7 +105,7 @@ fn list_user_images<'a>(
     _user_tok: UserToken,
     data_dir: State<DataDir>,
     username: String,
-) -> Result<Json<Vec<String>>, Status> {
+) -> Result<Json<Vec<String>>, Error> {
     let DataDir(data_dir) = data_dir.inner();
     let path = data_dir
         .join("images")
@@ -121,41 +116,38 @@ fn list_user_images<'a>(
             iter.filter_map(Result::ok)
                 .filter_map(|entry| {
                     entry.file_name().to_str().map(|n| {
-                        uri!(user_image: username = username.as_str(), name = n).to_string()
+                        uri!(read_user_image: username = username.as_str(), name = n).to_string()
                     })
                 })
                 .collect(),
         )),
-        _ => Err(Status::InternalServerError),
+        _ => Err(Error::InternalError),
     }
 }
 
 #[get("/api/user/<username>/cards/private/image/<name>")]
-fn user_image(
+fn read_user_image(
     _user_tok: UserToken,
     data_dir: State<DataDir>,
     username: String,
     name: String,
-) -> Result<NamedFile, Status> {
+) -> Result<NamedFile, Error> {
     let DataDir(data_dir) = data_dir.inner();
     let path = data_dir
         .join("images")
         .join("private")
         .join(username.as_str())
         .join(name);
-    NamedFile::open(path.as_path()).map_err(|e| match e.kind() {
-        std::io::ErrorKind::NotFound => Status::NotFound,
-        _ => Status::InternalServerError,
-    })
+    Ok(NamedFile::open(path.as_path())?)
 }
 
 #[post("/api/user/<username>/cards/private", data = "<card>")]
-pub fn new_user_card<'a>(
+pub fn create_user_card<'a>(
     db: DbConn,
     _user_tok: UserToken,
     username: String,
     card: Json<CardEntry>,
-) -> Result<Created<Json<CardEntry>>, Status> {
+) -> Result<Created<Json<CardEntry>>, Error> {
     use crate::schema::{user_cards, users};
 
     let DbConn(conn) = db;
@@ -163,8 +155,7 @@ pub fn new_user_card<'a>(
     let user_id: i32 = users::table
         .filter(users::username.eq(username.as_str()))
         .select(users::id)
-        .first(&conn)
-        .map_err(|_| Status::NotFound)?;
+        .first(&conn)?;
 
     let new_card = NewUserCard {
         user_id,
@@ -172,19 +163,15 @@ pub fn new_user_card<'a>(
         images: card.images.clone(),
         categories: card.categories.clone(),
     };
-    let res = diesel::insert_into(user_cards::table)
+    diesel::insert_into(user_cards::table)
         .values(&new_card)
-        .execute(&conn);
-    let location = uri!(user_cards: username, card.phrase.to_string(), _, _, _);
-    match res {
-        Ok(_) => Ok(Created(location.to_string(), Some(card))),
-        Err(DatabaseError(UniqueViolation, _)) => Err(Status::Conflict),
-        Err(_) => Err(Status::InternalServerError),
-    }
+        .execute(&conn)?;
+    let location = uri!(list_user_cards: username, card.phrase.to_string(), _, _, _);
+    Ok(Created(location.to_string(), Some(card)))
 }
 
 #[get("/api/user/<username>/cards/private?<phrase>&<categories>&<images>&<offset>")]
-pub fn user_cards<'a>(
+pub fn list_user_cards<'a>(
     db: DbConn,
     _user_tok: UserToken,
     username: String,
@@ -192,18 +179,17 @@ pub fn user_cards<'a>(
     categories: Option<CSVec<String>>,
     images: Option<CSVec<String>>,
     offset: Option<i64>,
-) -> Result<Json<CardPageResp<'a>>, Status> {
+) -> Result<Json<CardPageResp<'a>>, Error> {
     use crate::schema::{user_cards, users};
     let DbConn(conn) = db;
 
     let user: User = users::table
         .filter(users::username.eq(username.as_str()))
-        .first(&conn)
-        .map_err(|_| Status::NotFound)?;
+        .first(&conn)?;
 
     let mut cards_query = UserCard::belonging_to(&user).into_boxed();
     let mut next_page = uri!(
-        user_cards: username = username,
+        list_user_cards: username = username,
         offset = _,
         phrase = _,
         categories = _,
@@ -240,8 +226,7 @@ pub fn user_cards<'a>(
             user_cards::categories,
         ))
         .limit(PAGE_LIMIT)
-        .get_results(&conn)
-        .map_err(|_| Status::InternalServerError)?;
+        .get_results(&conn)?;
 
     query_parts.push(format!("offset={}", cards.len()));
 
@@ -266,21 +251,20 @@ pub fn user_cards<'a>(
 }
 
 #[patch("/api/user/<username>/cards/private?<phrase>", data = "<update>")]
-pub fn patch_user_card<'a>(
+pub fn update_user_card<'a>(
     db: DbConn,
     _user_tok: UserToken,
     username: String,
     phrase: String,
     update: Json<UpdateCardEntry>,
-) -> Result<Json<CardEntry<'a>>, Status> {
+) -> Result<Json<CardEntry<'a>>, Error> {
     use crate::schema::{user_cards, users};
     let DbConn(conn) = db;
 
     let user_id: i32 = users::table
         .filter(users::username.eq(username.as_str()))
         .select(users::id)
-        .first(&conn)
-        .map_err(|_| Status::NotFound)?;
+        .first(&conn)?;
 
     let (phrase, images, categories): (Cow<str>, Vec<Cow<str>>, Vec<Cow<str>>) =
         diesel::update(user_cards::table)
@@ -295,11 +279,7 @@ pub fn patch_user_card<'a>(
                 user_cards::images,
                 user_cards::categories,
             ))
-            .get_result(&conn)
-            .map_err(|e| match e {
-                DatabaseError(UniqueViolation, _) => Status::Conflict,
-                _ => Status::InternalServerError,
-            })?;
+            .get_result(&conn)?;
 
     let update_res = CardEntry {
         phrase,
