@@ -771,6 +771,7 @@ dependencies = [
  "rocket_contrib",
  "rust-crypto",
  "serde",
+ "serde_json",
  "tempfile",
 ]
 

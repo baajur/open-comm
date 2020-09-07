@@ -16,8 +16,20 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-use open_comm::construct_rocket;
+use std::{env, process::Command};
 
-fn main() {
-    construct_rocket().launch();
+pub fn setup() {
+    env::set_var(
+        "ROCKET_DATABASES",
+        format!(
+            "{{user_db={{url=\"{}\"}}}}",
+            String::from_utf8_lossy(
+                Command::new("pg_tmp")
+                    .output()
+                    .expect("valid pg_tmp instance")
+                    .stdout
+                    .as_ref()
+            )
+        ),
+    );
 }

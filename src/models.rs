@@ -98,7 +98,7 @@ pub struct RegisterForm {
 }
 
 /// The response type of a register request.
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct RegisterResp {
     pub token: String,
 }
@@ -111,7 +111,7 @@ pub struct LoginForm {
 }
 
 /// The response type of a login request.
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct LoginResp {
     pub token: String,
 }
@@ -146,7 +146,7 @@ pub struct NewUserCard<'a> {
 }
 
 /// The response type of a card query.
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct CardPageResp<'a> {
     pub cards: Vec<CardEntry<'a>>,
     pub next_page: Option<String>,

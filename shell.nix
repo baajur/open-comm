@@ -21,6 +21,7 @@ in
       elmPackages.elm
       elmPackages.elm-test
       elmPackages.elm-format
+      ephemeralpg
     ];
     shellHook = ''
       if ! docker ps --format '{{.Names}}' | grep -w open-comm-dev-db &>/dev/null; then
