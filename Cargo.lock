@@ -793,6 +793,7 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "jsonwebtoken",
+ "lazy_static",
  "mobc",
  "mobc-postgres",
  "rand 0.7.3",

@@ -16,7 +16,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::{convert::Infallible, env, fs};
+use std::{convert::Infallible, fs};
 
 use jsonwebtoken::{DecodingKey, EncodingKey};
 use warp::{Filter, Reply};
@@ -25,45 +25,44 @@ pub mod guard;
 
 pub mod auth;
 pub mod tile;
+pub mod user;
 
 pub mod db;
 
 mod error;
-pub use error::Error;
+pub use error::{handle_rejects, Error};
 
-const DEFAULT_DATABASE_URL: &'static str = "postgres://postgres@0.0.0.0:5432";
+pub enum JWTConfig {
+    Secret(String),
+    RSAFiles { private: String, public: String },
+}
 
-pub async fn app() -> Result<impl Filter<Extract = impl Reply, Error = Infallible> + Clone, Error> {
-    let db_url = env::var("DATABASE_URL").unwrap_or_else(|_| DEFAULT_DATABASE_URL.to_string());
+pub async fn app(
+    db_url: String,
+    maybe_jwt: Option<JWTConfig>,
+) -> Result<impl Filter<Extract = impl Reply, Error = Infallible> + Clone, Error> {
     let db_pool = db::create_pool(db_url.as_str())?;
     db::init_db(&db_pool).await?;
 
-    let (jwt_priv, jwt_pub): (EncodingKey, DecodingKey<'static>) = match env::var("JWT_SECRET") {
-        Ok(secret) => (
+    let jwt = maybe_jwt.unwrap_or_else(|| JWTConfig::Secret(auth::random_string(32)));
+    let (jwt_priv, jwt_pub): (EncodingKey, DecodingKey<'static>) = match jwt {
+        JWTConfig::Secret(secret) => (
             EncodingKey::from_secret(secret.as_bytes()),
             DecodingKey::from_secret(secret.as_bytes()).into_static(),
         ),
-        _ => match (env::var("JWT_PRIVATE_KEY"), env::var("JWT_PUBLIC_KEY")) {
-            (Ok(private), Ok(public)) => (
-                EncodingKey::from_rsa_pem(fs::read(private)?.as_ref())?,
-                DecodingKey::from_rsa_pem(fs::read(public)?.as_ref())?.into_static(),
-            ),
-            _ => {
-                let secret = auth::random_string(32);
-                (
-                    EncodingKey::from_secret(secret.as_bytes()),
-                    DecodingKey::from_secret(secret.as_bytes()).into_static(),
-                )
-            }
-        },
+        JWTConfig::RSAFiles { private, public } => (
+            EncodingKey::from_rsa_pem(fs::read(private)?.as_ref())?,
+            DecodingKey::from_rsa_pem(fs::read(public)?.as_ref())?.into_static(),
+        ),
     };
 
     let auth_api = auth::api(db_pool.clone(), jwt_priv);
-    let tile_api = tile::api(db_pool, jwt_pub);
+    let tile_api = tile::api(db_pool.clone(), jwt_pub.clone());
+    let user_api = user::api(db_pool, jwt_pub);
 
     tracing_subscriber::fmt::init();
     let route = warp::path("api")
-        .and(auth_api.or(tile_api))
+        .and(auth_api.or(tile_api).or(user_api))
         .with(warp::filters::trace::request())
         .recover(error::handle_rejects);
     Ok(route)

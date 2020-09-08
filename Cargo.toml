@@ -31,3 +31,6 @@ warp = "0.2.5"
 tracing = "0.1.19"
 tracing-futures = "0.2.4"
 tracing-subscriber = "0.2.11"
+
+[dev-dependencies]
+lazy_static = "1.4.0"

@@ -29,7 +29,9 @@ use jsonwebtoken::{
 use rand::{distributions::Alphanumeric, thread_rng, Rng};
 use serde::{Deserialize, Serialize};
 use warp::{
+    http::StatusCode,
     reply::{json, Json},
+    reply::{with_status, WithStatus},
     Filter, Rejection, Reply,
 };
 
@@ -60,13 +62,13 @@ pub fn api(
     register.or(login)
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct Register {
     pub username: String,
     pub password: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct RegisterResp {
     pub token: String,
 }
@@ -75,7 +77,7 @@ async fn register_handler(
     pool: db::Pool,
     jwt_key: EncodingKey,
     mut login: Login,
-) -> Result<Json, Rejection> {
+) -> Result<WithStatus<Json>, Rejection> {
     let conn = db::get_db_conn(&pool).await?;
 
     let user_ins = conn
@@ -99,18 +101,21 @@ async fn register_handler(
     .await
     .map_err(Error::DBError)?;
 
-    Ok(json(&RegisterResp {
-        token: generate_jwt(login.username, &jwt_key)?,
-    }))
+    Ok(with_status(
+        json(&RegisterResp {
+            token: generate_jwt(login.username, &jwt_key)?,
+        }),
+        StatusCode::CREATED,
+    ))
 }
 
-#[derive(Deserialize)]
+#[derive(Serialize, Deserialize)]
 pub struct Login {
     pub username: String,
     pub password: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Deserialize)]
 pub struct LoginResp {
     pub token: String,
 }

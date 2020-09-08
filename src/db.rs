@@ -54,3 +54,12 @@ pub async fn init_db(db_pool: &Pool) -> Result<(), Error> {
     conn.batch_execute(init_sql).await.map_err(Error::DBError)?;
     Ok(())
 }
+
+pub async fn uninit_db(db_pool: &Pool) -> Result<(), Error> {
+    let uninit_sql = include_str!("uninit.sql");
+    let conn = get_db_conn(db_pool).await?;
+    conn.batch_execute(uninit_sql)
+        .await
+        .map_err(Error::DBError)?;
+    Ok(())
+}
