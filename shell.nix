@@ -41,6 +41,7 @@ in
       export DATABASE_URL="postgres://postgres@$dbip:5432"
       export ROCKET_DATABASES="{user_db={url=\"$DATABASE_URL\"}}"
       export RUST_LOG=info
+      export JWT_SECRET=secret
       '';
   }
 

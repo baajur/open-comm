@@ -13,16 +13,7 @@ CREATE TABLE IF NOT EXISTS user_auths (
             ON DELETE CASCADE
             ON UPDATE CASCADE
 );
-ALTER TABLE IF EXISTS cards
-RENAME TO tiles;
 CREATE TABLE IF NOT EXISTS tiles (
-    id SERIAL PRIMARY KEY,
-    phrase TEXT UNIQUE NOT NULL,
-    images TEXT[] NOT NULL
-);
-ALTER TABLE IF EXISTS user_cards
-RENAME TO user_tiles;
-CREATE TABLE IF NOT EXISTS user_tiles (
     id SERIAL PRIMARY KEY,
     user_id SERIAL,
     phrase TEXT NOT NULL,

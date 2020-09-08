@@ -35,7 +35,7 @@ pub fn with_jwt_priv_key(
     warp::any().map(move || priv_key.clone())
 }
 
-pub fn with_authentic_user_header(
+pub fn authentic_user_header(
     pub_key: DecodingKey<'static>,
 ) -> impl Filter<Extract = (BearerToken,), Error = Rejection> + Clone {
     warp::any()
@@ -51,13 +51,12 @@ pub fn with_authentic_user_header(
 
 pub fn user_resource(
     pub_key: DecodingKey<'static>,
-) -> impl Filter<Extract = (BearerToken,), Error = Rejection> + Clone {
+) -> impl Filter<Extract = (String,), Error = Rejection> + Clone {
     warp::path::param()
-        .and(with_authentic_user_header(pub_key))
+        .and(authentic_user_header(pub_key))
         .and_then(|user: String, tok: BearerToken| async move {
-            println!("{}: {}", user, tok.username);
             if user == tok.username {
-                Ok(tok)
+                Ok(tok.username)
             } else {
                 Err(Rejection::from(Error::Unauthorized))
             }

@@ -24,18 +24,27 @@ use warp::{
     Filter, Rejection, Reply,
 };
 
-use crate::{auth::BearerToken, db, guard, Error};
+use crate::{db, guard, Error};
 
 pub fn api(
     db_pool: db::Pool,
     jwt_key: DecodingKey<'static>,
 ) -> impl Filter<Extract = (impl Reply,), Error = Rejection> + Clone {
-    warp::get()
+    let list_tiles = warp::get()
+        .and(warp::path("tiles"))
+        .and(warp::path::end())
+        .and(guard::with_db(db_pool.clone()))
+        .and_then(list_tiles_handler);
+
+    let list_user_tiles = warp::get()
+        .and(warp::path("user"))
         .and(guard::user_resource(jwt_key))
         .and(warp::path("tiles"))
         .and(warp::path::end())
         .and(guard::with_db(db_pool))
-        .and_then(list_tiles_handler)
+        .and_then(list_user_tiles_handler);
+
+    list_tiles.or(list_user_tiles)
 }
 
 #[derive(Serialize, Deserialize)]
@@ -55,19 +64,38 @@ impl<'a> From<&'a Row> for Tile {
     }
 }
 
-pub async fn list_tiles_handler(tok: BearerToken, pool: db::Pool) -> Result<Json, Rejection> {
+pub async fn list_tiles_handler(pool: db::Pool) -> Result<Json, Rejection> {
     Ok(json(
         &db::get_db_conn(&pool)
             .await?
             .query(
                 r#"
                 SELECT phrase, images, categories
-                FROM user_tiles
-                INNER JOIN users
-                ON users.id = user_tiles.user_id
-                WHERE users.username = $1
+                FROM tiles WHERE user_id IS NULL
                 "#,
-                &[&tok.username],
+                &[],
+            )
+            .await
+            .map_err(Error::DBError)?
+            .iter()
+            .map(Tile::from)
+            .collect::<Vec<Tile>>(),
+    ))
+}
+
+pub async fn list_user_tiles_handler(username: String, pool: db::Pool) -> Result<Json, Rejection> {
+    Ok(json(
+        &db::get_db_conn(&pool)
+            .await?
+            .query(
+                r#"
+                SELECT phrase, images, categories
+                FROM tiles
+                INNER JOIN users
+                ON users.id = tiles.user_id
+                WHERE users.username = $1 OR tiles.user_id IS NULL
+                "#,
+                &[&username],
             )
             .await
             .map_err(Error::DBError)?
