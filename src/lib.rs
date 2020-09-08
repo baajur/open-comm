@@ -16,80 +16,55 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-#![feature(proc_macro_hygiene, decl_macro)]
-
-use std::{env, path::PathBuf};
-
-#[macro_use]
-extern crate rocket;
-
-use rocket::{
-    fairing::AdHoc,
-    response::content::{Html, JavaScript},
-    Rocket,
-};
-
-#[macro_use]
-extern crate diesel;
-
-#[macro_use]
-extern crate diesel_migrations;
+use std::{convert::Infallible, env, fs};
 
 use jsonwebtoken::{DecodingKey, EncodingKey};
+use warp::{Filter, Reply};
+
+pub mod guard;
 
 pub mod auth;
-pub mod card;
+pub mod tile;
+
+pub mod db;
+
 mod error;
-pub mod models;
-pub mod schema;
+pub use error::Error;
 
-pub use error::*;
+const DEFAULT_DATABASE_URL: &'static str = "postgres://postgres@0.0.0.0:5432";
 
-use models::*;
+pub async fn app() -> Result<impl Filter<Extract = impl Reply, Error = Infallible> + Clone, Error> {
+    let db_url = env::var("DATABASE_URL").unwrap_or_else(|_| DEFAULT_DATABASE_URL.to_string());
+    let db_pool = db::create_pool(db_url.as_str())?;
+    db::init_db(&db_pool).await?;
 
-#[get("/elm.js")]
-fn gui_lib() -> JavaScript<&'static str> {
-    JavaScript(include_str!(env!("GUI_LIB")))
-}
-
-#[get("/")]
-fn gui() -> Html<&'static str> {
-    Html(include_str!(env!("GUI_INDEX")))
-}
-
-embed_migrations!("migrations");
-
-pub fn construct_rocket() -> Rocket {
-    let secret = b"secret";
-    let jwt_key = JWTKey {
-        encoder: EncodingKey::from_secret(secret),
-        decoder: DecodingKey::from_secret(secret),
-    };
-    rocket::ignite()
-        .attach(DbConn::fairing())
-        .attach(AdHoc::on_attach("Run migrations", |r| {
-            if let Some(conn) = DbConn::get_one(&r) {
-                match embedded_migrations::run(&conn.0) {
-                    Ok(_) => Ok(r),
-                    Err(_) => Err(r),
-                }
-            } else {
-                Ok(r)
+    let (jwt_priv, jwt_pub): (EncodingKey, DecodingKey<'static>) = match env::var("JWT_SECRET") {
+        Ok(secret) => (
+            EncodingKey::from_secret(secret.as_bytes()),
+            DecodingKey::from_secret(secret.as_bytes()).into_static(),
+        ),
+        _ => match (env::var("JWT_PRIVATE_KEY"), env::var("JWT_PUBLIC_KEY")) {
+            (Ok(private), Ok(public)) => (
+                EncodingKey::from_rsa_pem(fs::read(private)?.as_ref())?,
+                DecodingKey::from_rsa_pem(fs::read(public)?.as_ref())?.into_static(),
+            ),
+            _ => {
+                let secret = auth::random_string(32);
+                (
+                    EncodingKey::from_secret(secret.as_bytes()),
+                    DecodingKey::from_secret(secret.as_bytes()).into_static(),
+                )
             }
-        }))
-        .attach(AdHoc::on_attach("Add data dir path", |r| {
-            let data_dir = match r.config().get_string("DATA_DIR") {
-                Ok(d) => PathBuf::from(d),
-                _ => match env::var("XDG_DATA_HOME") {
-                    Ok(parent) => PathBuf::from(parent),
-                    _ => PathBuf::from(env::var("HOME").unwrap()).join(".local"),
-                }
-                .join("open-comm"),
-            };
-            Ok(r.manage(DataDir(data_dir)))
-        }))
-        .mount("/", routes![gui, gui_lib])
-        .mount("/", auth::routes())
-        .mount("/", card::routes())
-        .manage(jwt_key)
+        },
+    };
+
+    let auth_api = auth::api(db_pool.clone(), jwt_priv);
+    let tile_api = tile::api(db_pool, jwt_pub);
+
+    tracing_subscriber::fmt::init();
+    let route = warp::path("api")
+        .and(auth_api.or(tile_api))
+        .with(warp::filters::trace::request())
+        .recover(error::handle_rejects);
+    Ok(route)
 }

@@ -16,43 +16,57 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::io;
+use std::convert::Infallible;
 
-use diesel::result::{DatabaseErrorKind as DBErrorKind, Error as DBError};
-use rocket::{http::Status, request::Request, response};
+use jsonwebtoken::errors::ErrorKind as JWTErrorKind;
+use mobc_postgres::tokio_postgres::error::SqlState;
+use warp::{http::StatusCode, reject, Rejection, Reply};
 
-#[derive(Debug)]
+#[derive(thiserror::Error, Debug)]
 pub enum Error {
-    NotFound,
-    Conflict,
-    InternalError,
+    #[error(transparent)]
+    DBPoolError(#[from] mobc::Error<mobc_postgres::tokio_postgres::Error>),
+    #[error(transparent)]
+    DBError(#[from] mobc_postgres::tokio_postgres::Error),
+    #[error("unauthorized request")]
+    Unauthorized,
+    #[error(transparent)]
+    JWTError(#[from] jsonwebtoken::errors::Error),
+    #[error(transparent)]
+    IOError(#[from] std::io::Error),
 }
 
-impl<'r> response::Responder<'r> for Error {
-    fn respond_to(self, _request: &Request) -> response::Result<'r> {
-        Err(match self {
-            Error::NotFound => Status::NotFound,
-            Error::Conflict => Status::Conflict,
-            Error::InternalError => Status::InternalServerError,
-        })
+impl reject::Reject for Error {}
+
+impl From<Error> for Rejection {
+    fn from(item: Error) -> Rejection {
+        reject::custom(item)
     }
 }
 
-impl From<io::Error> for Error {
-    fn from(item: io::Error) -> Self {
-        match item.kind() {
-            io::ErrorKind::NotFound => Error::NotFound,
-            _ => Error::InternalError,
-        }
-    }
-}
-
-impl From<DBError> for Error {
-    fn from(item: DBError) -> Self {
-        match item {
-            DBError::NotFound => Error::NotFound,
-            DBError::DatabaseError(DBErrorKind::UniqueViolation, _) => Error::Conflict,
-            _ => Error::InternalError,
-        }
-    }
+pub async fn handle_rejects(err: Rejection) -> Result<impl Reply, Infallible> {
+    Ok(warp::reply::with_status(
+        "",
+        match err.find::<Error>() {
+            Some(Error::Unauthorized) => StatusCode::UNAUTHORIZED,
+            Some(Error::JWTError(e)) => match e.kind() {
+                JWTErrorKind::InvalidIssuer
+                | JWTErrorKind::InvalidSignature
+                | JWTErrorKind::ExpiredSignature => StatusCode::UNAUTHORIZED,
+                _ => StatusCode::INTERNAL_SERVER_ERROR,
+            },
+            Some(Error::DBError(e)) => {
+                if let Some(code) = e.code() {
+                    if *code == SqlState::UNIQUE_VIOLATION {
+                        StatusCode::CONFLICT
+                    } else {
+                        StatusCode::INTERNAL_SERVER_ERROR
+                    }
+                } else {
+                    StatusCode::INTERNAL_SERVER_ERROR
+                }
+            }
+            _ => StatusCode::INTERNAL_SERVER_ERROR,
+        },
+    ))
 }

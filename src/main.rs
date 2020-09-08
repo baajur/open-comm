@@ -16,8 +16,9 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-use open_comm::construct_rocket;
-
-fn main() {
-    construct_rocket().launch();
+#[tokio::main]
+async fn main() {
+    warp::serve(open_comm::app().await.expect("app initialized properly"))
+        .run(([0, 0, 0, 0], 8080))
+        .await;
 }
