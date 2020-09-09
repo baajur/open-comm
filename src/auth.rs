@@ -47,16 +47,16 @@ pub fn api(
     let login = warp::post()
         .and(warp::path("login"))
         .and(warp::path::end())
+        .and(warp::body::json())
         .and(guard::with_db(db_pool.clone()))
         .and(guard::with_jwt_priv_key(jwt_key.clone()))
-        .and(warp::body::json())
         .and_then(login_handler);
     let register = warp::post()
         .and(warp::path("register"))
         .and(warp::path::end())
+        .and(warp::body::json())
         .and(guard::with_db(db_pool.clone()))
         .and(guard::with_jwt_priv_key(jwt_key.clone()))
-        .and(warp::body::json())
         .and_then(register_handler);
 
     register.or(login)
@@ -74,16 +74,16 @@ pub struct RegisterResp {
 }
 
 async fn register_handler(
+    mut registration: Register,
     pool: db::Pool,
     jwt_key: EncodingKey,
-    mut login: Login,
 ) -> Result<WithStatus<Json>, Rejection> {
     let conn = db::get_db_conn(&pool).await?;
 
     let user_ins = conn
         .query_one(
             "INSERT INTO users (username) VALUES ($1) RETURNING (id)",
-            &[&login.username],
+            &[&registration.username],
         )
         .await
         .map_err(Error::DBError)?;
@@ -91,8 +91,8 @@ async fn register_handler(
     let user_id: i32 = user_ins.get("id");
 
     let salt = random_string(SALT_SIZE);
-    login.password.extend(salt.chars());
-    let password_hash = secure_hash(login.password);
+    registration.password.extend(salt.chars());
+    let password_hash = secure_hash(registration.password);
 
     conn.execute(
         "INSERT INTO user_auths (user_id, password_hash, salt) VALUES ($1, $2, $3)",
@@ -103,7 +103,7 @@ async fn register_handler(
 
     Ok(with_status(
         json(&RegisterResp {
-            token: generate_jwt(login.username, &jwt_key)?,
+            token: generate_jwt(registration.username, &jwt_key)?,
         }),
         StatusCode::CREATED,
     ))
@@ -121,9 +121,9 @@ pub struct LoginResp {
 }
 
 async fn login_handler(
+    mut login: Login,
     pool: db::Pool,
     jwt_key: EncodingKey,
-    mut login: Login,
 ) -> Result<Json, Rejection> {
     let conn = db::get_db_conn(&pool).await?;
 

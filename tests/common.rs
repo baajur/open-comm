@@ -18,8 +18,6 @@
 
 use std::{env, sync::Mutex};
 
-use jsonwebtoken::{DecodingKey, EncodingKey};
-
 use open_comm::{auth::random_string, db};
 
 pub fn db_url<'a>() -> String {
@@ -58,12 +56,4 @@ pub fn secret() -> String {
         static ref SECRET: String = random_string(32);
     }
     SECRET.clone()
-}
-
-pub fn jwt_encoder() -> EncodingKey {
-    EncodingKey::from_secret(secret().as_bytes())
-}
-
-pub fn jwt_decoder() -> DecodingKey<'static> {
-    DecodingKey::from_secret(secret().as_bytes()).into_static()
 }

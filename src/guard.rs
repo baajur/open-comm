@@ -19,6 +19,7 @@
 use std::convert::Infallible;
 
 use jsonwebtoken::{DecodingKey, EncodingKey};
+use serde::{Deserialize, Serialize};
 use warp::{Filter, Rejection};
 
 use crate::{auth::BearerToken, db, Error};
@@ -38,27 +39,51 @@ pub fn with_jwt_priv_key(
 pub fn authentic_user_header(
     pub_key: DecodingKey<'static>,
 ) -> impl Filter<Extract = (BearerToken,), Error = Rejection> + Clone {
-    warp::any()
-        .and(warp::header("Authorization"))
-        .and_then(move |h: String| {
-            let k = pub_key.clone();
-            async move {
-                BearerToken::verify_token(&k, &h.as_str()["Bearer ".len()..])
-                    .map_err(|e| Rejection::from(e))
-            }
-        })
+    warp::header("Authorization").and_then(move |h: String| {
+        let k = pub_key.clone();
+        async move {
+            BearerToken::verify_token(&k, &h.as_str()["Bearer ".len()..])
+                .map_err(|e| Rejection::from(e))
+        }
+    })
+}
+
+#[derive(Serialize, Deserialize)]
+pub struct TokenQuery {
+    access_token: String,
+}
+
+pub fn authentic_token_query(
+    pub_key: DecodingKey<'static>,
+) -> impl Filter<Extract = (BearerToken,), Error = Rejection> + Clone {
+    warp::query().and_then(move |q: TokenQuery| {
+        let k = pub_key.clone();
+        async move {
+            BearerToken::verify_token(&k, &q.access_token.as_str()).map_err(|e| Rejection::from(e))
+        }
+    })
+}
+
+async fn user_and_token_match(user: String, tok: BearerToken) -> Result<String, Rejection> {
+    if user == tok.username {
+        Ok(tok.username)
+    } else {
+        Err(Rejection::from(Error::Unauthorized))
+    }
 }
 
 pub fn user_resource(
     pub_key: DecodingKey<'static>,
 ) -> impl Filter<Extract = (String,), Error = Rejection> + Clone {
     warp::path::param()
-        .and(authentic_user_header(pub_key))
-        .and_then(|user: String, tok: BearerToken| async move {
-            if user == tok.username {
-                Ok(tok.username)
-            } else {
-                Err(Rejection::from(Error::Unauthorized))
-            }
-        })
+        .and(authentic_user_header(pub_key.clone()))
+        .and_then(user_and_token_match)
+}
+
+pub fn user_resource_query(
+    pub_key: DecodingKey<'static>,
+) -> impl Filter<Extract = (String,), Error = Rejection> + Clone {
+    warp::path::param()
+        .and(authentic_user_header(pub_key.clone()))
+        .and_then(user_and_token_match)
 }

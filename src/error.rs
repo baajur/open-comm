@@ -45,17 +45,20 @@ impl From<Error> for Rejection {
 }
 
 pub async fn handle_rejects(err: Rejection) -> Result<impl Reply, Infallible> {
-    Ok(warp::reply::with_status(
-        "",
-        match err.find::<Error>() {
-            Some(Error::Unauthorized) => StatusCode::UNAUTHORIZED,
-            Some(Error::JWTError(e)) => match e.kind() {
+    let code = if err.is_not_found() {
+        StatusCode::NOT_FOUND
+    } else if let Some(_) = err.find::<warp::filters::body::BodyDeserializeError>() {
+        StatusCode::BAD_REQUEST
+    } else if let Some(e) = err.find::<Error>() {
+        match e {
+            Error::Unauthorized => StatusCode::UNAUTHORIZED,
+            Error::JWTError(e) => match e.kind() {
                 JWTErrorKind::InvalidIssuer
                 | JWTErrorKind::InvalidSignature
                 | JWTErrorKind::ExpiredSignature => StatusCode::UNAUTHORIZED,
                 _ => StatusCode::INTERNAL_SERVER_ERROR,
             },
-            Some(Error::DBError(e)) => {
+            Error::DBError(e) => {
                 if let Some(code) = e.code() {
                     if *code == SqlState::UNIQUE_VIOLATION {
                         StatusCode::CONFLICT
@@ -67,6 +70,12 @@ pub async fn handle_rejects(err: Rejection) -> Result<impl Reply, Infallible> {
                 }
             }
             _ => StatusCode::INTERNAL_SERVER_ERROR,
-        },
-    ))
+        }
+    } else if let Some(_) = err.find::<warp::reject::MethodNotAllowed>() {
+        StatusCode::METHOD_NOT_ALLOWED
+    } else {
+        StatusCode::INTERNAL_SERVER_ERROR
+    };
+
+    Ok(warp::reply::with_status("", code))
 }

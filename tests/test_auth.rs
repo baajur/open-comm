@@ -16,41 +16,42 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-use warp::Filter;
-
-use open_comm::{auth, handle_rejects, user};
+use open_comm::{app, auth, user, JWTConfig};
 
 mod common;
 
 #[tokio::test]
 async fn auth_flow() {
-    let pool = common::db_pool().await;
-    let auth_api = auth::api(pool.clone(), common::jwt_encoder()).recover(handle_rejects);
-    let user_api = user::api(pool, common::jwt_decoder()).recover(handle_rejects);
+    let api = app(
+        common::db_pool().await,
+        Some(JWTConfig::Secret(common::secret())),
+    )
+    .await
+    .expect("app initialized");
 
     // Register a new user.
     let res = warp::test::request()
         .method("POST")
-        .path("/register")
+        .path("/api/register")
         .header("Content-Type", "application/json")
         .json(&auth::Register {
             username: "foo".to_string(),
             password: "bar".to_string(),
         })
-        .reply(&auth_api)
+        .reply(&api)
         .await;
     assert_eq!(res.status(), 201, "registration created new resource");
 
     // Attempt to repeat the registration. This request should fail.
     let res = warp::test::request()
         .method("POST")
-        .path("/register")
+        .path("/api/register")
         .header("Content-Type", "application/json")
         .json(&auth::Register {
             username: "foo".to_string(),
             password: "bar".to_string(),
         })
-        .reply(&auth_api)
+        .reply(&api)
         .await;
     assert_eq!(
         res.status(),
@@ -61,13 +62,13 @@ async fn auth_flow() {
     // Login to the new user's account.
     let res = warp::test::request()
         .method("POST")
-        .path("/login")
+        .path("/api/login")
         .header("Content-Type", "application/json")
         .json(&auth::Login {
             username: "foo".to_string(),
             password: "bar".to_string(),
         })
-        .reply(&auth_api)
+        .reply(&api)
         .await;
     assert_eq!(res.status(), 200, "login is allowed for the new user");
     let body = String::from_utf8_lossy(res.body());
@@ -78,10 +79,10 @@ async fn auth_flow() {
     // Access a protected resource.
     let res = warp::test::request()
         .method("GET")
-        .path("/user/foo")
+        .path("/api/user/foo")
         .header("Accept", "application/json")
         .header("Authorization", format!("Bearer {}", token))
-        .reply(&user_api)
+        .reply(&api)
         .await;
     assert_eq!(
         res.status(),
@@ -100,13 +101,13 @@ async fn auth_flow() {
     // Register a new user.
     let res = warp::test::request()
         .method("POST")
-        .path("/register")
+        .path("/api/register")
         .header("Content-Type", "application/json")
         .json(&auth::Register {
             username: "bar".to_string(),
             password: "foo".to_string(),
         })
-        .reply(&auth_api)
+        .reply(&api)
         .await;
     assert_eq!(res.status(), 201, "registration created new resource");
     let body = String::from_utf8_lossy(res.body());
@@ -117,10 +118,10 @@ async fn auth_flow() {
     // Attempt to access a protected resource of a different user.
     let res = warp::test::request()
         .method("GET")
-        .path("/user/foo")
+        .path("/api/user/foo")
         .header("Accept", "application/json")
         .header("Authorization", format!("Bearer {}", token))
-        .reply(&user_api)
+        .reply(&api)
         .await;
     assert_eq!(
         res.status(),

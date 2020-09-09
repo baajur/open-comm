@@ -16,14 +16,15 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-use open_comm::{app, JWTConfig};
+use open_comm::{app, db, JWTConfig};
 use std::env;
 
 const DEFAULT_DATABASE_URL: &'static str = "postgres://postgres@0.0.0.0:5432";
 
 #[tokio::main]
-async fn main() {
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let db_url = env::var("DATABASE_URL").unwrap_or_else(|_| DEFAULT_DATABASE_URL.to_string());
+    let db_pool = db::create_pool(db_url.as_str())?;
 
     let jwt = match env::var("JWT_SECRET") {
         Ok(secret) => Some(JWTConfig::Secret(secret)),
@@ -33,7 +34,8 @@ async fn main() {
         },
     };
 
-    warp::serve(app(db_url, jwt).await.expect("app initialized properly"))
+    warp::serve(app(db_pool, jwt).await.expect("app initialized properly"))
         .run(([0, 0, 0, 0], 8080))
         .await;
+    Ok(())
 }

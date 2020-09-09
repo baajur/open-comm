@@ -38,10 +38,9 @@ pub enum JWTConfig {
 }
 
 pub async fn app(
-    db_url: String,
+    db_pool: db::Pool,
     maybe_jwt: Option<JWTConfig>,
 ) -> Result<impl Filter<Extract = impl Reply, Error = Infallible> + Clone, Error> {
-    let db_pool = db::create_pool(db_url.as_str())?;
     db::init_db(&db_pool).await?;
 
     let jwt = maybe_jwt.unwrap_or_else(|| JWTConfig::Secret(auth::random_string(32)));
