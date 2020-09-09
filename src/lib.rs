@@ -59,10 +59,32 @@ pub async fn app(
     let tile_api = tile::api(db_pool.clone(), jwt_pub.clone());
     let user_api = user::api(db_pool, jwt_pub);
 
+    let api = warp::path("api").and(auth_api.or(tile_api).or(user_api));
+
+    let gui_lib = warp::path!("elm.js").map(|| {
+        warp::reply::with_header(
+            include_str!(env!("GUI_LIB")),
+            "Content-Type",
+            "text/javascript",
+        )
+    });
+    let gui_index =
+        warp::path::end().map(|| warp::reply::html(include_str!("../web-gui/index.html")));
+    let gui_style = warp::path!("style.css").map(|| {
+        warp::reply::with_header(
+            include_str!("../web-gui/style.css"),
+            "Content-Type",
+            "text/css",
+        )
+    });
+
+    let gui = gui_lib.or(gui_index).or(gui_style);
+
     tracing_subscriber::fmt::init();
-    let route = warp::path("api")
-        .and(auth_api.or(tile_api).or(user_api))
+    let routes = api
+        .or(gui)
         .with(warp::filters::trace::request())
         .recover(error::handle_rejects);
-    Ok(route)
+
+    Ok(routes)
 }

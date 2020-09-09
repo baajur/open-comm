@@ -16,8 +16,9 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-use open_comm::{app, db, JWTConfig};
 use std::env;
+
+use open_comm::{app, db, JWTConfig};
 
 const DEFAULT_DATABASE_URL: &'static str = "postgres://postgres@0.0.0.0:5432";
 
@@ -34,8 +35,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         },
     };
 
-    warp::serve(app(db_pool, jwt).await.expect("app initialized properly"))
-        .run(([0, 0, 0, 0], 8080))
-        .await;
+    let app_routes = app(db_pool, jwt).await.expect("app initialized properly");
+
+    warp::serve(app_routes).run(([0, 0, 0, 0], 8080)).await;
     Ok(())
 }

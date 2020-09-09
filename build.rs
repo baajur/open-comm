@@ -16,7 +16,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-use std::{env, fs, path::PathBuf, process::Command};
+use std::{env, path::PathBuf, process::Command};
 
 fn main() {
     let profile = env::var_os("PROFILE").unwrap().into_string().unwrap();
@@ -39,12 +39,4 @@ fn main() {
         std::process::exit(1);
     }
     println!("cargo:rustc-env=GUI_LIB={}", gui_lib_path_str);
-
-    let gui_index_path = out_dir.join("index.html");
-    fs::copy("web-gui/index.html", gui_index_path.clone())
-        .expect("Failed to copy web-gui entry point to out directory.");
-    println!(
-        "cargo:rustc-env=GUI_INDEX={}",
-        gui_index_path.to_str().unwrap()
-    );
 }
