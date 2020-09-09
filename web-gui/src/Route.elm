@@ -21,13 +21,14 @@ module Route exposing
     ( Route(..)
     , fromUrl
     , href
+    , icon
     , pushUrl
     , replaceUrl
     , showRoute
     )
 
 import Browser.Navigation as Nav
-import Html exposing (Attribute)
+import Html exposing (Attribute, Html)
 import Html.Attributes as Attr
 import Url exposing (Url)
 import Url.Builder as Builder
@@ -43,6 +44,19 @@ type Route
 href : Route -> Attribute msg
 href targetRoute =
     Attr.href (showRoute targetRoute)
+
+
+icon : Route -> Html msg
+icon targetRoute =
+    case targetRoute of
+        Login ->
+            Html.i [ Attr.classList [ ( "fa-sign-in-alt", True ), ( "fa", True ) ] ] []
+
+        Register ->
+            Html.i [ Attr.classList [ ( "fa-user-plus", True ), ( "fa", True ) ] ] []
+
+        Home ->
+            Html.i [ Attr.classList [ ( "fa-home", True ), ( "fa", True ) ] ] []
 
 
 replaceUrl : Nav.Key -> Route -> Cmd msg
