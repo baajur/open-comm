@@ -95,6 +95,7 @@ view { form, problems } =
                     [ Attr.placeholder "Password"
                     , Events.onInput EnteredPassword
                     , Attr.value form.password
+                    , Attr.type_ "password"
                     ]
                     []
                 , Html.button []

@@ -103,16 +103,18 @@ view { form, problems } =
                     [ Attr.placeholder "Password"
                     , Events.onInput EnteredPassword
                     , Attr.value form.password
+                    , Attr.type_ "password"
                     ]
                     []
                 , Html.input
                     [ Attr.placeholder "Repeat Password"
                     , Events.onInput EnteredRepeatPassword
                     , Attr.value form.passwordRepeat
+                    , Attr.type_ "password"
                     ]
                     []
                 , Html.button []
-                    [ Html.text "Sign in" ]
+                    [ Html.text "Register" ]
                 ]
             , List.map showProblem problems
                 |> Page.viewErrors ClickedDismissErrors
