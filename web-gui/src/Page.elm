@@ -24,6 +24,7 @@ import Browser exposing (Document)
 import Html exposing (Html)
 import Html.Attributes as Attr
 import Html.Events as Events
+import Icon
 import Route exposing (Route)
 
 
@@ -37,20 +38,18 @@ type Page
 view : Maybe User -> Page -> { title : String, content : Html msg } -> Document msg
 view maybeUser page { title, content } =
     { title = title ++ " - Open Communication"
-    , body = [ viewHeader page maybeUser, content, viewFooter ]
+    , body =
+        [ viewHeader page maybeUser
+        , Html.main_ [] [ content, viewFooter ]
+        ]
     }
 
 
 viewHeader : Page -> Maybe User -> Html msg
 viewHeader page maybeUser =
-    Html.nav []
-        [ Html.div []
-            [ Html.a [ Route.href Route.Home ]
-                [ Html.text "Open Communication" ]
-            , Html.ul [] <|
-                navbarLink page Route.Home [ Html.text "Home" ]
-                    :: viewMenu page maybeUser
-            ]
+    Html.nav [ Attr.class "navbar" ]
+        [ Html.ul [ Attr.class "navbar-nav" ] <|
+            viewMenu page maybeUser
         ]
 
 
@@ -61,24 +60,42 @@ viewMenu page maybeUser =
             navbarLink page
     in
     case maybeUser of
-        Just user ->
-            let
-                username =
-                    Api.username user
-            in
-            [ linkTo Route.Home [ Html.text username ]
-            ]
+        Just _ ->
+            [ linkTo Route.Home "Home" ]
 
         Nothing ->
-            [ linkTo Route.Login [ Html.text "Sign in" ]
-            , linkTo Route.Register [ Html.text "Sign up" ]
+            [ linkTo Route.Home "Home"
+            , linkTo Route.Login "Sign in"
+            , linkTo Route.Register "Sign up"
             ]
 
 
-navbarLink : Page -> Route -> List (Html msg) -> Html msg
-navbarLink page route linkContent =
-    Html.li [ Attr.classList [ ( "active", isActive page route ) ] ]
-        [ Html.a [ Route.href route ] linkContent ]
+navbarLink : Page -> Route -> String -> Html msg
+navbarLink page route linkText =
+    Html.li
+        [ Attr.classList
+            [ ( "nav-item", True )
+            , ( "active", isActive page route )
+            ]
+        ]
+        [ Html.a [ Route.href route, Attr.class "nav-link" ]
+            [ routeIcon route
+            , Html.span [ Attr.class "link-text" ] [ Html.text linkText ]
+            ]
+        ]
+
+
+routeIcon : Route -> Html msg
+routeIcon route =
+    case route of
+        Route.Home ->
+            Icon.home
+
+        Route.Login ->
+            Icon.login
+
+        Route.Register ->
+            Icon.register
 
 
 viewFooter : Html msg

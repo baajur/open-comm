@@ -59,7 +59,7 @@ view (Model session) =
         case session of
             Session.LoggedIn _ user ->
                 Html.div []
-                    [ Html.h1 [] [ Html.text (Api.username user) ]
+                    [ Html.p [] [ Html.text (Api.username user) ]
                     , Html.button [ Events.onClick Logout ] [ Html.text "Sign out" ]
                     ]
 
