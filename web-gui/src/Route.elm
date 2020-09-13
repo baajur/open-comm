@@ -38,6 +38,7 @@ type Route
     = Login
     | Register
     | Home
+    | Logout
 
 
 href : Route -> Attribute msg
@@ -61,6 +62,7 @@ parser =
         [ Parser.map Login (s "login")
         , Parser.map Register (s "register")
         , Parser.map Home Parser.top
+        , Parser.map Logout (s "logout")
         ]
 
 
@@ -86,3 +88,6 @@ breakRoute route =
 
         Register ->
             [ "register" ]
+
+        Logout ->
+            [ "logout" ]

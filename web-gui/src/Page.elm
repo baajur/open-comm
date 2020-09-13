@@ -32,6 +32,7 @@ type Page
     = Other
     | Login
     | Register
+    | Logout
     | Home
 
 
@@ -61,7 +62,9 @@ viewMenu page maybeUser =
     in
     case maybeUser of
         Just _ ->
-            [ linkTo Route.Home "Home" ]
+            [ linkTo Route.Home "Home"
+            , linkTo Route.Logout "Sign out"
+            ]
 
         Nothing ->
             [ linkTo Route.Home "Home"
@@ -96,6 +99,9 @@ routeIcon route =
 
         Route.Register ->
             Icon.register
+
+        Route.Logout ->
+            Icon.logout
 
 
 viewFooter : Html msg

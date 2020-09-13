@@ -17,7 +17,7 @@
 -}
 
 
-module Page.Home exposing
+module Page.Logout exposing
     ( Model
     , Msg
     , init
@@ -30,6 +30,7 @@ module Page.Home exposing
 import Api
 import Html exposing (Html)
 import Html.Events as Events
+import Route
 import Session exposing (Session)
 
 
@@ -48,7 +49,8 @@ init session =
 
 
 type Msg
-    = GotSession Session
+    = Logout
+    | GotSession Session
 
 
 view : Model -> { title : String, content : Html Msg }
@@ -56,19 +58,24 @@ view (Model session) =
     { title = "Home"
     , content =
         case session of
-            Session.LoggedIn _ user ->
+            Session.LoggedIn _ _ ->
                 Html.div []
-                    [ Html.p [] [ Html.text (Api.username user) ] ]
+                    [ Html.button
+                        [ Events.onClick Logout ]
+                        [ Html.text "Sign out" ]
+                    ]
 
             Session.Guest _ ->
-                Html.div []
-                    [ Html.h1 [] [ Html.text "Guest" ] ]
+                Html.p [] [ Html.text "Already logged out." ]
     }
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
-update msg _ =
+update msg model =
     case msg of
+        Logout ->
+            ( model, Api.logout )
+
         GotSession s ->
             ( Model s, Cmd.none )
 

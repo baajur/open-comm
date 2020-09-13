@@ -28,6 +28,7 @@ import Page
 import Page.Blank as Blank
 import Page.Home as Home
 import Page.Login as Login
+import Page.Logout as Logout
 import Page.NotFound as NotFound
 import Page.Register as Register
 import Route exposing (Route)
@@ -45,6 +46,7 @@ type Model
     | Login Login.Model
     | Register Register.Model
     | Home Home.Model
+    | Logout Logout.Model
 
 
 init : Maybe User -> Url -> Nav.Key -> ( Model, Cmd Msg )
@@ -85,6 +87,9 @@ view model =
         Home home ->
             viewPage Page.Home GotHomeMsg (Home.view home)
 
+        Logout logout ->
+            viewPage Page.Logout GotLogoutMsg (Logout.view logout)
+
 
 type Msg
     = ChangeUrl Url
@@ -93,6 +98,7 @@ type Msg
     | GotRegisterMsg Register.Msg
     | GotHomeMsg Home.Msg
     | GotSession Session
+    | GotLogoutMsg Logout.Msg
 
 
 toSession : Model -> Session
@@ -112,6 +118,9 @@ toSession model =
 
         Home m ->
             Home.toSession m
+
+        Logout m ->
+            Logout.toSession m
 
 
 changeRouteTo : Maybe Route -> Model -> ( Model, Cmd Msg )
@@ -135,6 +144,10 @@ changeRouteTo maybeRoute model =
         Just Route.Home ->
             Home.init session
                 |> updateWith Home GotHomeMsg
+
+        Just Route.Logout ->
+            Logout.init session
+                |> updateWith Logout GotLogoutMsg
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -161,6 +174,10 @@ update msg model =
         ( GotHomeMsg subMsg, Home subModel ) ->
             Home.update subMsg subModel
                 |> updateWith Home GotHomeMsg
+
+        ( GotLogoutMsg subMsg, Logout subModel ) ->
+            Logout.update subMsg subModel
+                |> updateWith Logout GotLogoutMsg
 
         ( ChangeUrl url, _ ) ->
             changeRouteTo (Route.fromUrl url) model
@@ -202,6 +219,9 @@ subscriptions model =
 
         Home subModel ->
             Sub.map GotHomeMsg (Home.subscriptions subModel)
+
+        Logout subModel ->
+            Sub.map GotLogoutMsg (Logout.subscriptions subModel)
 
 
 main : Program Value Model Msg
