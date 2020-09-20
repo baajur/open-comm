@@ -16,7 +16,7 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
-use open_comm::{auth, app, tile, JWTConfig};
+use open_comm::{app, auth, tile, JWTConfig};
 
 mod common;
 
@@ -48,35 +48,64 @@ async fn tile_flow() {
         maybe_token.unwrap().token
     };
 
-    let tiles = vec![
-        tile::Tile {
-            phrase: "Dad".to_string(),
-            images: vec!["/img/user/tile_flow/somehash.png".to_string()],
-            categories: vec!["Family".to_string()],
-        },
-        tile::Tile {
-            phrase: "pizza".to_string(),
-            images: vec!["/img/user/tile_flow/someotherhash.png".to_string()],
-            categories: vec!["Food".to_string()],
-        }
-    ];
-
     // Test create tiles.
-    for tile in tiles.clone() {
+    {
         let res = warp::test::request()
             .method("POST")
             .path("/api/user/tile_flow/tiles")
-            .header("Content-Type", "application/json")
+            .header(
+                "Content-Type",
+                "multipart/form-data; boundary=------------------------0af30d233b54bac0",
+            )
             .header("Accept", "application/json")
             .header("Authorization", format!("Bearer {}", token))
-            .json(&tile)
+            .body(include_bytes!("tile_create.bin"))
             .reply(&api)
             .await;
         assert_eq!(res.status(), 201, "new tile created new resource");
         let body = String::from_utf8_lossy(res.body());
         let maybe_tile = serde_json::from_str::<tile::Tile>(body.as_ref());
         assert!(maybe_tile.is_ok(), "new tile responds with valid data");
-        assert_eq!(maybe_tile.unwrap(), tile, "new tile responds with correct tile");
+        let tile = maybe_tile.unwrap();
+        assert_eq!(
+            tile.phrase, "pizza",
+            "new tile responds with correct phrase"
+        );
+        assert_eq!(
+            tile.categories,
+            vec!["food", "favorite"],
+            "new tile responds with correct categories"
+        );
+    }
+
+    // Test create tiles.
+    {
+        let res = warp::test::request()
+            .method("POST")
+            .path("/api/user/tile_flow/tiles")
+            .header(
+                "Content-Type",
+                "multipart/form-data; boundary=------------------------0b56506eb827d2ac",
+            )
+            .header("Accept", "application/json")
+            .header("Authorization", format!("Bearer {}", token))
+            .body(include_bytes!("tile_create2.bin"))
+            .reply(&api)
+            .await;
+        assert_eq!(res.status(), 201, "new tile created new resource");
+        let body = String::from_utf8_lossy(res.body());
+        let maybe_tile = serde_json::from_str::<tile::Tile>(body.as_ref());
+        assert!(maybe_tile.is_ok(), "new tile responds with valid data");
+        let tile = maybe_tile.unwrap();
+        assert_eq!(
+            tile.phrase, "spinach",
+            "new tile responds with correct phrase"
+        );
+        assert_eq!(
+            tile.categories,
+            vec!["food", "not favorite"],
+            "new tile responds with correct categories"
+        );
     }
 
     {
@@ -92,10 +121,15 @@ async fn tile_flow() {
         let body = String::from_utf8_lossy(res.body());
         let maybe_tiles = serde_json::from_str::<Vec<tile::Tile>>(body.as_ref());
         assert!(maybe_tiles.is_ok(), "tile query responds with valid data");
+        let tile = maybe_tiles.unwrap();
         assert_eq!(
-            maybe_tiles.unwrap(),
-            vec![tiles[1].clone()],
-            "tile query responds with correct tile"
+            tile[0].phrase, "pizza",
+            "tile query responds with correct phrase"
+        );
+        assert_eq!(
+            tile[0].categories,
+            vec!["food", "favorite"],
+            "tile query responds with correct categories"
         );
     }
 
@@ -103,7 +137,7 @@ async fn tile_flow() {
         // Test query phrase.
         let res = warp::test::request()
             .method("GET")
-            .path("/api/user/tile_flow/tiles?category=Family")
+            .path("/api/user/tile_flow/tiles?category=favorite")
             .header("Accept", "application/json")
             .header("Authorization", format!("Bearer {}", token))
             .reply(&api)
@@ -112,10 +146,67 @@ async fn tile_flow() {
         let body = String::from_utf8_lossy(res.body());
         let maybe_tiles = serde_json::from_str::<Vec<tile::Tile>>(body.as_ref());
         assert!(maybe_tiles.is_ok(), "tile query responds with valid data");
+        let tile = maybe_tiles.unwrap();
         assert_eq!(
-            maybe_tiles.unwrap(),
-            vec![tiles[0].clone()],
-            "tile query responds with correct tile"
+            tile[0].phrase, "pizza",
+            "tile query responds with correct phrase"
         );
+        assert_eq!(
+            tile[0].categories,
+            vec!["food", "favorite"],
+            "tile query responds with correct categories"
+        );
+    }
+
+    {
+        // Test query phrase unauth.
+        let res = warp::test::request()
+            .method("GET")
+            .path("/api/user/tile_flow/tiles?category=favorite")
+            .header("Accept", "application/json")
+            .reply(&api)
+            .await;
+        assert_eq!(res.status(), 405, "tile query should be unauthorized");
+    }
+
+    {
+        // Test update tile.
+        let res = warp::test::request()
+            .method("PATCH")
+            .path("/api/user/tile_flow/tiles/pizza")
+            .header(
+                "Content-Type",
+                "multipart/form-data; boundary=------------------------85d9e2b74277c596",
+            )
+            .header("Accept", "application/json")
+            .header("Authorization", format!("Bearer {}", token))
+            .body(include_bytes!("tile_update.bin"))
+            .reply(&api)
+            .await;
+        assert_eq!(res.status(), 200, "tile update ok");
+        let body = String::from_utf8_lossy(res.body());
+        let maybe_tile = serde_json::from_str::<tile::Tile>(body.as_ref());
+        assert!(maybe_tile.is_ok(), "tile query responds with valid data");
+        let tile = maybe_tile.unwrap();
+        assert_eq!(
+            tile.phrase, "pie",
+            "tile query responds with correct phrase"
+        );
+        assert_eq!(
+            tile.categories,
+            vec!["food", "favorite"],
+            "tile query responds with correct categories"
+        );
+    }
+
+    {
+        // Test delete tile.
+        let res = warp::test::request()
+            .method("DELETE")
+            .path("/api/user/tile_flow/tiles/pie")
+            .header("Authorization", format!("Bearer {}", token))
+            .reply(&api)
+            .await;
+        assert_eq!(res.status(), 200, "tile delete ok");
     }
 }

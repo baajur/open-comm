@@ -22,6 +22,7 @@ use jsonwebtoken::{DecodingKey, EncodingKey};
 use warp::{Filter, Reply};
 
 pub mod guard;
+pub mod util;
 
 pub mod auth;
 pub mod tile;
@@ -59,7 +60,10 @@ pub async fn app(
     let tile_api = tile::api(db_pool.clone(), jwt_pub.clone());
     let user_api = user::api(db_pool, jwt_pub);
 
-    let api = warp::path("api").and(auth_api.or(tile_api).or(user_api));
+    let api = warp::path("api")
+        // Limit to 4MiB
+        // .and(warp::body::content_length_limit(4194304))
+        .and(auth_api.or(tile_api).or(user_api));
 
     let gui_lib = warp::path!("elm.js").map(|| {
         warp::reply::with_header(

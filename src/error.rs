@@ -34,6 +34,10 @@ pub enum Error {
     JWTError(#[from] jsonwebtoken::errors::Error),
     #[error(transparent)]
     IOError(#[from] std::io::Error),
+    #[error("malformed request")]
+    MalformedRequest,
+    #[error("not found")]
+    NotFound,
 }
 
 impl reject::Reject for Error {}
@@ -69,6 +73,8 @@ pub async fn handle_rejects(err: Rejection) -> Result<impl Reply, Infallible> {
                     StatusCode::INTERNAL_SERVER_ERROR
                 }
             }
+            Error::MalformedRequest => StatusCode::BAD_REQUEST,
+            Error::NotFound => StatusCode::NOT_FOUND,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         }
     } else if let Some(_) = err.find::<warp::reject::MethodNotAllowed>() {

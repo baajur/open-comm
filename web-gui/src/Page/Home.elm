@@ -29,7 +29,6 @@ module Page.Home exposing
 
 import Api
 import Html exposing (Html)
-import Html.Events as Events
 import Session exposing (Session)
 
 

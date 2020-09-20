@@ -31,7 +31,6 @@ pub fn api(
     jwt_key: DecodingKey<'static>,
 ) -> impl Filter<Extract = (impl Reply,), Error = Rejection> + Clone {
     warp::get()
-        .and(warp::path("user"))
         .and(guard::user_resource(jwt_key))
         .and(warp::path::end())
         .and(guard::with_db(db_pool))

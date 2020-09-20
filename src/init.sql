@@ -17,7 +17,8 @@ CREATE TABLE IF NOT EXISTS tiles (
     id SERIAL PRIMARY KEY,
     user_id SERIAL,
     phrase TEXT NOT NULL,
-    images TEXT[] NOT NULL,
+    image BYTEA NOT NULL,
+    image_filename TEXT NOT NULL,
     categories TEXT[] NOT NULL,
     UNIQUE (user_id, phrase),
     CONSTRAINT fk_user

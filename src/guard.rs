@@ -36,7 +36,7 @@ pub fn with_jwt_priv_key(
     warp::any().map(move || priv_key.clone())
 }
 
-pub fn authentic_user_header(
+pub fn authentic_token_header(
     pub_key: DecodingKey<'static>,
 ) -> impl Filter<Extract = (BearerToken,), Error = Rejection> + Clone {
     warp::header("Authorization").and_then(move |h: String| {
@@ -64,6 +64,22 @@ pub fn authentic_token_query(
     })
 }
 
+pub fn authentic_token(
+    pub_key: DecodingKey<'static>,
+) -> impl Filter<Extract = (BearerToken,), Error = Rejection> + Clone {
+    authentic_token_header(pub_key.clone())
+        .or(authentic_token_query(pub_key))
+        .unify()
+}
+
+pub fn optional_authentic_token(
+    pub_key: DecodingKey<'static>,
+) -> impl Filter<Extract = (Option<BearerToken>,), Error = Infallible> + Clone {
+    let token_branch = authentic_token(pub_key).map(|tok| Some(tok));
+    let pub_branch = warp::any().map(|| None);
+    token_branch.or(pub_branch).unify()
+}
+
 async fn user_and_token_match(user: String, tok: BearerToken) -> Result<String, Rejection> {
     if user == tok.username {
         Ok(tok.username)
@@ -75,15 +91,16 @@ async fn user_and_token_match(user: String, tok: BearerToken) -> Result<String, 
 pub fn user_resource(
     pub_key: DecodingKey<'static>,
 ) -> impl Filter<Extract = (String,), Error = Rejection> + Clone {
-    warp::path::param()
-        .and(authentic_user_header(pub_key.clone()))
+    warp::path::path("user")
+        .and(warp::path::param())
+        .and(authentic_token_header(pub_key))
         .and_then(user_and_token_match)
 }
 
-pub fn user_resource_query(
+pub fn optional_user_resource(
     pub_key: DecodingKey<'static>,
-) -> impl Filter<Extract = (String,), Error = Rejection> + Clone {
-    warp::path::param()
-        .and(authentic_user_header(pub_key.clone()))
-        .and_then(user_and_token_match)
+) -> impl Filter<Extract = (Option<String>,), Error = Infallible> + Clone {
+    let user_branch = user_resource(pub_key.clone()).map(|username| Some(username));
+    let pub_branch = warp::any().map(|| None);
+    user_branch.or(pub_branch).unify()
 }
