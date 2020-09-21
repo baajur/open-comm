@@ -28,8 +28,10 @@ port module Api exposing
     , getTiles
     , login
     , logout
+    , onSpeechEnd
     , onUserChange
     , register
+    , speakText
     , storeUser
     , userImg
     , username
@@ -255,6 +257,12 @@ port onStoreChange : (Value -> msg) -> Sub msg
 port storeCache : Maybe Value -> Cmd msg
 
 
+port speakText : String -> Cmd msg
+
+
+port onSpeechEndPort : (Value -> msg) -> Sub msg
+
+
 {-| Encode the credential into the local storage cache.
 -}
 storeUser : User -> Cmd msg
@@ -267,6 +275,20 @@ storeUser user =
 onUserChange : (Maybe User -> msg) -> Sub msg
 onUserChange toMsg =
     onStoreChange (\val -> toMsg (decodeFromChange val))
+
+
+{-| Create a subscription for when text-to-speech has completed.
+-}
+onSpeechEnd : (String -> msg) -> Sub msg
+onSpeechEnd toMsg =
+    onSpeechEndPort
+        (\v ->
+            Decode.decodeValue Decode.string v
+                -- This will never occur. The string from speakText will always be returned back
+                -- exactly as it was given.
+                |> Result.withDefault ""
+                |> toMsg
+        )
 
 
 

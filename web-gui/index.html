@@ -30,6 +30,12 @@
           app.ports.onStoreChange.send(event.newValue);
         }
       }, false);
+
+      app.ports.speakText.subscribe(function(val) {
+        var utterance = new SpeechSynthesisUtterance(val);
+        utterance.onend = () => { app.ports.onSpeechEndPort.send(val) };
+        window.speechSynthesis.speak(utterance);
+      });
     </script>
   </body>
 </html>

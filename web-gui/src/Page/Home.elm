@@ -28,6 +28,7 @@ module Page.Home exposing
     )
 
 import Api
+import BoundedDeque exposing (BoundedDeque)
 import Dict exposing (Dict)
 import Html exposing (Html)
 import Html.Attributes as Attr
@@ -43,6 +44,8 @@ type alias Model =
     , addTile : Maybe AddTile.Model
     , categories : Dict String (List Api.Tile)
     , category : String
+    , speaking : Maybe String
+    , speechQueue : BoundedDeque String
     , problems : List String
     }
 
@@ -62,6 +65,8 @@ init session category =
       , addTile = Nothing
       , categories = Dict.empty
       , category = cat
+      , speaking = Nothing
+      , speechQueue = BoundedDeque.empty 10
       , problems = []
       }
     , case session of
@@ -74,7 +79,7 @@ init session category =
 
 
 view : Model -> { title : String, content : Html Msg }
-view { session, addTile, categories, category } =
+view { session, addTile, categories, category, speaking, speechQueue } =
     let
         addTileView =
             case ( session, addTile ) of
@@ -93,15 +98,34 @@ view { session, addTile, categories, category } =
 
                 _ ->
                     []
+
+        speakingView =
+            case speaking of
+                Just phrase ->
+                    Html.div [ Attr.class "speech-text" ]
+                        [ Html.strong []
+                            [ Html.text phrase ]
+                        , BoundedDeque.foldl
+                            (\s a -> " " ++ s ++ a)
+                            ""
+                            speechQueue
+                            |> Html.text
+                        ]
+
+                Nothing ->
+                    Html.text ""
     in
     { title = "Home"
     , content =
-        Html.div [ Attr.class "tiles" ]
-            ((Maybe.withDefault [] (Dict.get category categories)
-                |> List.map (viewTile (Session.user session))
-             )
-                ++ addTileView
-            )
+        Html.div []
+            [ Html.div [ Attr.class "tiles" ]
+                ((Maybe.withDefault [] (Dict.get category categories)
+                    |> List.map (viewTile (Session.user session))
+                 )
+                    ++ addTileView
+                )
+            , speakingView
+            ]
     }
 
 
@@ -116,7 +140,10 @@ viewTile user tile =
                 Nothing ->
                     tile.image
     in
-    Html.div [ Attr.class "tile" ]
+    Html.div
+        [ Attr.class "tile"
+        , Events.onClick (SpeakPhrase tile.phrase)
+        ]
         [ Html.h1 [ Attr.class "tile-phrase" ] [ Html.text tile.phrase ]
         , Html.img
             [ Attr.class "tile-img"
@@ -128,6 +155,8 @@ viewTile user tile =
 
 type Msg
     = GotSession Session
+    | SpeakPhrase String
+    | FinishedSpeaking String
     | GotAddTileMsg AddTile.Msg
     | GotTiles String (Result Http.Error (List Api.Tile))
     | AddedTile (Result Http.Error Api.Tile)
@@ -139,6 +168,35 @@ update msg model =
     case msg of
         GotSession s ->
             ( { model | session = s }, Cmd.none )
+
+        SpeakPhrase phrase ->
+            case model.speaking of
+                Just _ ->
+                    ( { model
+                        | speechQueue =
+                            BoundedDeque.pushBack phrase model.speechQueue
+                      }
+                    , Cmd.none
+                    )
+
+                Nothing ->
+                    ( { model | speaking = Just phrase }
+                    , Api.speakText phrase
+                    )
+
+        FinishedSpeaking _ ->
+            let
+                ( next, queue ) =
+                    BoundedDeque.popFront model.speechQueue
+            in
+            ( { model | speechQueue = queue, speaking = next }
+            , case next of
+                Just phrase ->
+                    Api.speakText phrase
+
+                Nothing ->
+                    Cmd.none
+            )
 
         GotAddTileMsg subMsg ->
             case ( model.session, model.addTile ) of
@@ -228,4 +286,7 @@ updateWith toModel ( subModel, subCmd ) =
 
 subscriptions : Model -> Sub Msg
 subscriptions { session } =
-    Session.onChange GotSession (Session.navKey session)
+    Sub.batch
+        [ Session.onChange GotSession (Session.navKey session)
+        , Api.onSpeechEnd FinishedSpeaking
+        ]
