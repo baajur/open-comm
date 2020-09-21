@@ -25,10 +25,6 @@ body::-webkit-scrollbar-thumb {
     background: #6649b8;
 }
 
-main {
-    margin-left: 5rem;
-}
-
 .navbar {
     position: fixed;
     background-color: var(--bg-primary);
@@ -85,7 +81,28 @@ main {
     color: orangered;
 }
 
+.tiles {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr));
+    grid-gap: 1rem;
+}
+
+.tile {
+    border-radius: 1rem;
+    background: #D8DEE9;
+    padding: 1rem;
+}
+
+.tile-phrase {
+    text-align: center;
+}
+
+.tile-img {
+    width: 100%;
+}
+
 @media only screen and (min-width: 600px) {
+
     .navbar {
         top: 0;
         width: 5rem;
@@ -100,9 +117,14 @@ main {
         display: inline;
         transition: opacity var(--transition-speed);
     }
+
+    main {
+        margin: 1rem 1rem 1rem 6rem;
+    }
 }
 
 @media only screen and (max-width: 600px) {
+
     .navbar {
         bottom: 0;
         width: 100vw;
@@ -118,6 +140,6 @@ main {
     }
 
     main {
-        margin: 0;
+        margin: 1rem 1rem 5rem 1rem;
     }
 }

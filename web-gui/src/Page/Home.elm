@@ -28,50 +28,204 @@ module Page.Home exposing
     )
 
 import Api
+import Dict exposing (Dict)
 import Html exposing (Html)
+import Html.Attributes as Attr
+import Html.Events as Events
+import Http
+import Icon
+import Page.AddTile as AddTile
 import Session exposing (Session)
 
 
-type Model
-    = Model Session
+type alias Model =
+    { session : Session
+    , addTile : Maybe AddTile.Model
+    , categories : Dict String (List Api.Tile)
+    , category : String
+    , problems : List String
+    }
 
 
 toSession : Model -> Session
-toSession (Model session) =
+toSession { session } =
     session
 
 
-init : Session -> ( Model, Cmd Msg )
-init session =
-    ( Model session, Cmd.none )
+init : Session -> Maybe String -> ( Model, Cmd Msg )
+init session category =
+    let
+        cat =
+            Maybe.withDefault "" category
+    in
+    ( { session = session
+      , addTile = Nothing
+      , categories = Dict.empty
+      , category = cat
+      , problems = []
+      }
+    , case session of
+        Session.LoggedIn _ user ->
+            Api.getTiles user category (GotTiles cat)
+
+        Session.Guest _ ->
+            Cmd.none
+    )
+
+
+view : Model -> { title : String, content : Html Msg }
+view { session, addTile, categories, category } =
+    let
+        addTileView =
+            case ( session, addTile ) of
+                ( Session.LoggedIn _ _, Just t ) ->
+                    [ AddTile.view t
+                        |> Html.map GotAddTileMsg
+                    ]
+
+                ( Session.LoggedIn _ _, Nothing ) ->
+                    [ Html.div
+                        [ Events.onClick StartAddingTile
+                        , Attr.class "tile"
+                        ]
+                        [ Icon.add ]
+                    ]
+
+                _ ->
+                    []
+    in
+    { title = "Home"
+    , content =
+        Html.div [ Attr.class "tiles" ]
+            ((Maybe.withDefault [] (Dict.get category categories)
+                |> List.map (viewTile (Session.user session))
+             )
+                ++ addTileView
+            )
+    }
+
+
+viewTile : Maybe Api.User -> Api.Tile -> Html Msg
+viewTile user tile =
+    let
+        imgSrc =
+            case user of
+                Just u ->
+                    Api.userImg u tile.image
+
+                Nothing ->
+                    tile.image
+    in
+    Html.div [ Attr.class "tile" ]
+        [ Html.h1 [ Attr.class "tile-phrase" ] [ Html.text tile.phrase ]
+        , Html.img
+            [ Attr.class "tile-img"
+            , Attr.src imgSrc
+            ]
+            []
+        ]
 
 
 type Msg
     = GotSession Session
-
-
-view : Model -> { title : String, content : Html Msg }
-view (Model session) =
-    { title = "Home"
-    , content =
-        case session of
-            Session.LoggedIn _ user ->
-                Html.div []
-                    [ Html.p [] [ Html.text (Api.username user) ] ]
-
-            Session.Guest _ ->
-                Html.div []
-                    [ Html.h1 [] [ Html.text "Guest" ] ]
-    }
+    | GotAddTileMsg AddTile.Msg
+    | GotTiles String (Result Http.Error (List Api.Tile))
+    | AddedTile (Result Http.Error Api.Tile)
+    | StartAddingTile
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
-update msg _ =
+update msg model =
     case msg of
         GotSession s ->
-            ( Model s, Cmd.none )
+            ( { model | session = s }, Cmd.none )
+
+        GotAddTileMsg subMsg ->
+            case ( model.session, model.addTile ) of
+                ( Session.LoggedIn _ user, Just subModel ) ->
+                    AddTile.update GotAddTileMsg AddedTile user subMsg subModel
+                        |> updateWith
+                            (\s -> { model | addTile = Just s })
+
+                ( _, Nothing ) ->
+                    ( model, Cmd.none )
+
+                _ ->
+                    ( { model | addTile = Nothing }, Cmd.none )
+
+        GotTiles cat (Ok tiles) ->
+            ( { model
+                | categories = Dict.insert cat tiles model.categories
+              }
+            , Cmd.none
+            )
+
+        GotTiles _ (Err _) ->
+            let
+                errMsg =
+                    "unable to query tiles"
+            in
+            ( { model | problems = [ errMsg ] }
+            , Cmd.none
+            )
+
+        StartAddingTile ->
+            ( { model | addTile = Just AddTile.init }
+            , Cmd.none
+            )
+
+        AddedTile (Ok tile) ->
+            let
+                addToCategory c acc =
+                    Dict.update
+                        c
+                        (\l ->
+                            Just
+                                (List.sortBy .phrase
+                                    (tile :: Maybe.withDefault [] l)
+                                )
+                        )
+                        acc
+            in
+            ( { model
+                | categories =
+                    List.foldl
+                        addToCategory
+                        model.categories
+                        ("" :: tile.categories)
+                , addTile = Nothing
+              }
+            , Cmd.none
+            )
+
+        AddedTile (Err e) ->
+            let
+                errMsg =
+                    case e of
+                        Http.BadStatus 409 ->
+                            "There is already a tile for that phrase."
+
+                        Http.BadStatus n ->
+                            "Internal error (" ++ String.fromInt n ++ ")."
+
+                        _ ->
+                            "Unknown error."
+            in
+            ( { model | problems = [ errMsg ] }
+            , Cmd.none
+            )
+
+
+updateWith :
+    (subModel -> Model)
+    -> ( subModel, Cmd Msg )
+    -> ( Model, Cmd Msg )
+updateWith toModel ( subModel, subCmd ) =
+    ( toModel subModel
+    , subCmd
+    )
 
 
 subscriptions : Model -> Sub Msg
-subscriptions (Model session) =
+subscriptions { session } =
     Session.onChange GotSession (Session.navKey session)

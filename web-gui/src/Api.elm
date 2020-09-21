@@ -20,24 +20,31 @@
 port module Api exposing
     ( LoginForm
     , RegisterForm
+    , Tile
+    , TileForm
     , User
+    , addTile
     , application
+    , getTiles
     , login
     , logout
     , onUserChange
     , register
     , storeUser
+    , userImg
     , username
     )
 
 import Api.Endpoint as Endpoint exposing (Endpoint)
 import Browser
 import Browser.Navigation as Nav
+import File exposing (File)
 import Http exposing (Body)
 import Json.Decode as Decode exposing (Decoder, Value)
 import Json.Decode.Pipeline exposing (required)
 import Json.Encode as Encode exposing (object, string)
 import Url exposing (Url)
+import Url.Builder as Builder
 
 
 type User
@@ -149,6 +156,61 @@ register form msgFromHttp =
     post Endpoint.register Nothing body decoder msgFromHttp
 
 
+type alias TileForm =
+    { phrase : String
+    , categories : List String
+    , image : File
+    }
+
+
+type alias Tile =
+    { phrase : String
+    , categories : List String
+    , image : String
+    }
+
+
+tileDecoder : Decoder Tile
+tileDecoder =
+    Decode.succeed Tile
+        |> required "phrase" Decode.string
+        |> required "categories" (Decode.list Decode.string)
+        |> required "image" Decode.string
+
+
+addTile : User -> TileForm -> CmdMsg Tile msg -> Cmd msg
+addTile user form msgFromHttp =
+    let
+        body =
+            Http.multipartBody
+                [ Http.stringPart "phrase" form.phrase
+                , Http.filePart "image" form.image
+                , Http.stringPart "categories"
+                    (Encode.encode 0 (Encode.list Encode.string form.categories))
+                ]
+    in
+    post
+        (Endpoint.addTile (username user))
+        (Just user)
+        body
+        tileDecoder
+        msgFromHttp
+
+
+getTiles : User -> Maybe String -> CmdMsg (List Tile) msg -> Cmd msg
+getTiles user category msgFromHttp =
+    get
+        (Endpoint.tile (username user) category)
+        (Just user)
+        (Decode.list tileDecoder)
+        msgFromHttp
+
+
+userImg : User -> String -> String
+userImg (User _ (Token tok)) url =
+    url ++ "?access_token=" ++ tok
+
+
 
 -- DECODERS
 
@@ -234,43 +296,46 @@ post url maybeUser body decoder msgFromHttp =
         }
 
 
+get : Endpoint -> Maybe User -> Decoder a -> CmdMsg a msg -> Cmd msg
+get url maybeUser decoder msgFromHttp =
+    Endpoint.request
+        { method = "GET"
+        , url = url
+        , expect = Http.expectJson msgFromHttp decoder
+        , headers =
+            case maybeUser of
+                Just cred ->
+                    [ authHeader cred ]
 
--- get : Endpoint -> Maybe User -> Decoder a -> CmdMsg a msg -> Cmd msg
--- get url maybeUser decoder msgFromHttp =
---     Endpoint.request
---         { method = "GET"
---         , url = url
---         , expect = Http.expectJson msgFromHttp decoder
---         , headers =
---             case maybeUser of
---                 Just cred ->
---                     [ authHeader cred ]
---
---                 Nothing ->
---                     []
---         , body = Http.emptyBody
---         , timeout = Nothing
---         , tracker = Nothing
---         }
--- put : Endpoint -> User -> Body -> Decoder a -> CmdMsg a msg -> Cmd msg
--- put url tok body decoder msgFromHttp =
---     Endpoint.request
---         { method = "PUT"
---         , url = url
---         , expect = Http.expectJson msgFromHttp decoder
---         , headers = [ authHeader tok ]
---         , body = body
---         , timeout = Nothing
---         , tracker = Nothing
---         }
--- delete : Endpoint -> User -> Body -> Decoder a -> CmdMsg a msg -> Cmd msg
--- delete url tok body decoder msgFromHttp =
---     Endpoint.request
---         { method = "DELETE"
---         , url = url
---         , expect = Http.expectJson msgFromHttp decoder
---         , headers = [ authHeader tok ]
---         , body = body
---         , timeout = Nothing
---         , tracker = Nothing
---         }
+                Nothing ->
+                    []
+        , body = Http.emptyBody
+        , timeout = Nothing
+        , tracker = Nothing
+        }
+
+
+patch : Endpoint -> User -> Body -> Decoder a -> CmdMsg a msg -> Cmd msg
+patch url tok body decoder msgFromHttp =
+    Endpoint.request
+        { method = "PATCH"
+        , url = url
+        , expect = Http.expectJson msgFromHttp decoder
+        , headers = [ authHeader tok ]
+        , body = body
+        , timeout = Nothing
+        , tracker = Nothing
+        }
+
+
+delete : Endpoint -> User -> Body -> Decoder a -> CmdMsg a msg -> Cmd msg
+delete url tok body decoder msgFromHttp =
+    Endpoint.request
+        { method = "DELETE"
+        , url = url
+        , expect = Http.expectJson msgFromHttp decoder
+        , headers = [ authHeader tok ]
+        , body = body
+        , timeout = Nothing
+        , tracker = Nothing
+        }

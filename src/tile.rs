@@ -24,7 +24,7 @@ use serde::{Deserialize, Serialize};
 use warp::{
     http::StatusCode,
     multipart::FormData,
-    reply::{json, with_status, Json, WithStatus},
+    reply::{json, with_header, with_status, Json, WithHeader, WithStatus},
     Filter, Rejection, Reply,
 };
 
@@ -96,7 +96,7 @@ pub struct Tile {
 #[derive(Default)]
 struct TileForm {
     pub phrase: Option<String>,
-    pub image: Option<(Vec<u8>, String)>,
+    pub image: Option<(Vec<u8>, String, String)>,
     pub categories: Option<Vec<String>>,
 }
 
@@ -119,18 +119,12 @@ async fn decode_tile_form(mut form_data: FormData) -> Result<TileForm, Error> {
                     );
                 }
             }
-            ("image", Some(format)) => {
-                let maybe_ext = match format {
-                    "image/svg+xml" => Some("svg".to_string()),
-                    f if f.starts_with("image/") => {
-                        Some(f.strip_prefix("image/").unwrap().to_string())
-                    }
-                    _ => None,
-                };
-                if let Ok(bytes) = util::stream_bytes(part.stream()).await {
-                    if let Some(ext) = maybe_ext {
+            ("image", Some(content_type)) => {
+                let content_type = content_type.to_string();
+                if content_type.starts_with("image/") {
+                    if let Ok(bytes) = util::stream_bytes(part.stream()).await {
                         let hash = util::hash(bytes.as_slice());
-                        form.image = Some((bytes, format!("{}.{}", hash, ext)));
+                        form.image = Some((bytes, content_type, hash));
                     }
                 }
             }
@@ -147,7 +141,7 @@ pub async fn create_user_tile(
 ) -> Result<WithStatus<Json>, Rejection> {
     let tile = decode_tile_form(form).await?;
     match (tile.phrase, tile.image, tile.categories) {
-        (Some(phrase), Some((image, filename)), Some(categories)) => {
+        (Some(phrase), Some((image, content_type, hash)), Some(categories)) => {
             let conn = db::get_db_conn(&pool).await?;
             let uid: i32 = {
                 let row = conn
@@ -158,17 +152,17 @@ pub async fn create_user_tile(
             };
             conn.query(
                 r#"
-                INSERT INTO tiles (user_id, phrase, image, image_filename, categories)
-                VALUES ($1, $2, $3, $4, $5)
+                INSERT INTO tiles (user_id, phrase, image, image_type, image_hash, categories)
+                VALUES ($1, $2, $3, $4, $5, $6)
                 "#,
-                &[&uid, &phrase, &image, &filename, &categories],
+                &[&uid, &phrase, &image, &content_type, &hash, &categories],
             )
             .await
             .map_err(Error::DBError)?;
 
             let tile = Tile {
                 phrase: phrase.to_string(),
-                image: image_path(filename),
+                image: image_path(hash),
                 categories,
             };
 
@@ -203,25 +197,22 @@ pub async fn list_tiles(
         &conn
             .query(
                 r#"
-                SELECT phrase, image_filename, categories
+                SELECT phrase, image_hash, categories
                 FROM tiles
                 WHERE (user_id IS NULL OR user_id = $1)
                     AND ($2::TEXT IS NULL OR phrase LIKE $2)
                     AND ($3::TEXT IS NULL OR $3 = ANY(categories))
+                ORDER BY phrase ASC
                 "#,
                 &[&uid, &query.phrase, &query.category],
             )
             .await
             .map_err(Error::DBError)?
             .iter()
-            .map(|row| {
-                let filename: String = row.get("image_filename");
-
-                Tile {
-                    phrase: row.get("phrase"),
-                    image: image_path(filename),
-                    categories: row.get("categories"),
-                }
+            .map(|row| Tile {
+                phrase: row.get("phrase"),
+                image: image_path(row.get::<_, String>("image_hash")),
+                categories: row.get("categories"),
             })
             .collect::<Vec<Tile>>(),
     ))
@@ -229,22 +220,35 @@ pub async fn list_tiles(
 
 pub async fn read_image(
     maybe_tok: Option<BearerToken>,
-    filename: String,
+    hash: String,
     pool: db::Pool,
-) -> Result<Vec<u8>, Rejection> {
+) -> Result<WithHeader<Vec<u8>>, Rejection> {
     let conn = db::get_db_conn(&pool).await?;
+    let uid: Option<i32> = if let Some(tok) = maybe_tok {
+        let row = conn
+            .query_one("SELECT id FROM users WHERE username = $1", &[&tok.username])
+            .await
+            .map_err(Error::DBError)?;
+        Some(row.get("id"))
+    } else {
+        None
+    };
     let row = conn
         .query_one(
             r#"
-            SELECT image FROM tiles
+            SELECT image, image_type FROM tiles
             WHERE (user_id IS NULL OR user_id = $1)
-                AND image_filename = $2
+                AND image_hash = $2
             "#,
-            &[&maybe_tok.map(|tok| tok.username), &filename],
+            &[&uid, &hash],
         )
         .await
         .map_err(Error::DBError)?;
-    Ok(row.get("image"))
+    Ok(with_header(
+        row.get("image"),
+        "Content-Type",
+        row.get::<_, String>("image_type"),
+    ))
 }
 
 pub async fn update_user_tile(
@@ -262,9 +266,9 @@ pub async fn update_user_tile(
             .map_err(|_| Error::NotFound)?;
         row.get("id")
     };
-    let (image, image_filename) = match tile.image {
-        Some((bytes, filename)) => (Some(bytes), Some(filename)),
-        None => (None, None),
+    let (image, content_type, hash) = match tile.image {
+        Some((bytes, content_type, hash)) => (Some(bytes), Some(content_type), Some(hash)),
+        None => (None, None, None),
     };
     let row = conn
         .query_one(
@@ -272,15 +276,17 @@ pub async fn update_user_tile(
             UPDATE tiles
             SET phrase = COALESCE($1, phrase),
                 image = COALESCE($2, image),
-                image_filename = COALESCE($3, image_filename),
-                categories = COALESCE($4, categories)
-            WHERE user_id = $5 AND phrase = $6
-            RETURNING phrase, image_filename, categories
+                image_type = COALESCE($3, image_type),
+                image_hash = COALESCE($4, image_hash),
+                categories = COALESCE($5, categories)
+            WHERE user_id = $6 AND phrase = $7
+            RETURNING phrase, image_hash, categories
             "#,
             &[
                 &tile.phrase,
                 &image,
-                &image_filename,
+                &content_type,
+                &hash,
                 &tile.categories,
                 &uid,
                 &phrase,
@@ -291,7 +297,7 @@ pub async fn update_user_tile(
 
     let tile = Tile {
         phrase: row.get("phrase"),
-        image: image_path::<String>(row.get("image_filename")),
+        image: image_path(row.get::<_, String>("image_hash")),
         categories: row.get("categories"),
     };
 

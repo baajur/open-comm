@@ -142,7 +142,7 @@ changeRouteTo maybeRoute model =
                 |> updateWith Register GotRegisterMsg
 
         Just Route.Home ->
-            Home.init session
+            Home.init session Nothing
                 |> updateWith Home GotHomeMsg
 
         Just Route.Logout ->

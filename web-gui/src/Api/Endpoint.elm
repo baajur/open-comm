@@ -17,10 +17,18 @@
 -}
 
 
-module Api.Endpoint exposing (Endpoint, home, login, register, request)
+module Api.Endpoint exposing
+    ( Endpoint
+    , addTile
+    , home
+    , login
+    , register
+    , request
+    , tile
+    )
 
 import Http
-import Url.Builder exposing (QueryParameter)
+import Url.Builder as Builder exposing (QueryParameter)
 
 
 {-| Http.request, except it takes an Endpoint instead of a Url.
@@ -64,7 +72,7 @@ url : List String -> List QueryParameter -> Endpoint
 url paths queryParams =
     -- NOTE: Url.Builder takes care of percent-encoding special URL characters.
     -- See https://package.elm-lang.org/packages/elm/url/latest/Url#percentEncode
-    Url.Builder.absolute
+    Builder.absolute
         ("api" :: paths)
         queryParams
         |> Endpoint
@@ -87,3 +95,22 @@ register =
 home : Endpoint
 home =
     url [] []
+
+
+addTile : String -> Endpoint
+addTile username =
+    url [ "user", username, "tiles" ] []
+
+
+tile : String -> Maybe String -> Endpoint
+tile username category =
+    let
+        query =
+            case category of
+                Just cat ->
+                    [ Builder.string "category" cat ]
+
+                Nothing ->
+                    []
+    in
+    url [ "user", username, "tiles" ] query
