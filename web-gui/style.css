@@ -1,14 +1,16 @@
 :root {
     font-size: 16px;
-    --text-primary: #b6b6b6;
-    --text-secondary: #ececec;
-    --bg-primary: #23232e;
-    --bg-secondary: #141418;
+    --bg-primary: #ECEFF4;
+    --bg-secondary: #D8DEE9;
+    --bg-attention: #E5E9F0;
+    --fg-primary: #2E3440;
+    --fg-secondary: #3B4252;
+    --fg-attention: #434C5E;
 }
 
 body {
-    color: black;
-    background-color: white;
+    color: var(--fg-primary);
+    background-color: var(--bg-primary);
     margin: 0;
     padding: 0;
 }
@@ -27,7 +29,7 @@ body::-webkit-scrollbar-thumb {
 
 .navbar {
     position: fixed;
-    background-color: var(--bg-primary);
+    background-color: var(--fg-secondary);
     transition: width 200ms ease;
 }
 
@@ -49,7 +51,7 @@ body::-webkit-scrollbar-thumb {
     display: flex;
     align-items: center;
     height: 5rem;
-    color: var(--text-primary);
+    color: var(--bg-secondary);
     text-decoration: none;
     filter: grayscale(100%) opacity(0.7);
     transition: var(--transition-speed);
@@ -57,13 +59,13 @@ body::-webkit-scrollbar-thumb {
 
 .nav-link:hover {
     filter: grayscale(0%) opacity(1);
-    background: var(--bg-secondary);
-    color: var(--text-secondary);
+    background: var(--fg-attention);
+    color: var(--bg-attention);
 }
 
 .nav-item.active .nav-link {
     filter: grayscale(0%) opacity(1);
-    color: var(--text-secondary);
+    color: var(--bg-primary);
 }
 
 .link-text {
@@ -89,8 +91,15 @@ body::-webkit-scrollbar-thumb {
 
 .tile {
     border-radius: 1rem;
-    background: #D8DEE9;
+    background: var(--bg-secondary);
     padding: 1rem;
+    transition: transform 0.2s, background 0.5s;
+    box-shadow: 1px 1px 5px 0px var(--fg-secondary);
+}
+
+.tile:hover {
+    background: var(--bg-attention);
+    transform: scale(1.05);
 }
 
 .tile-phrase {
